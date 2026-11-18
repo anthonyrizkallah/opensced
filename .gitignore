@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.env
+.env.*
+*.parquet
+!examples/*.parquet
+examples/**/not_published_by_ercot/
+.DS_Store

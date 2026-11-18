@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opensced"
+version = "0.1.0"
+description = "An open market-clearing engine for power markets: offers, limits, reserve demand and network constraints in; prices at every node out. First market: ERCOT real-time co-optimization."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+keywords = ["ERCOT", "SCED", "LMP", "RTC+B", "power markets", "economic dispatch", "ancillary services"]
+dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.11"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+parquet = ["pyarrow>=14"]
+exact = ["highspy>=1.7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opensced"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
