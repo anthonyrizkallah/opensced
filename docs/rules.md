@@ -27,7 +27,7 @@ rules.notes                             # where each number comes from
 | `voll`, `offer_cap`, `offer_floor`, `shortage_adder` | The named prices. The shortage price and the price cap are computed from them unless given |
 | `statuses` | What each resource status may do: be dispatched, and which reserves it may carry |
 | `two_step`, `mitigated_offer_floors`, `mitigation_adder_share` | The two-step clearing and the floors and adder its mitigation uses |
-| `limits` | Caps on the total awards of a group of products, in MW or as a share of a demand curve, from all or some resources |
+| `limits` | Caps on the total awards of a group of products, in MW, as a share of a requirement, or as a requirement less a number of MW, from all or some resources |
 | `price_cap` | Lambda and reserve prices are capped here after the solve |
 | `shift_factor_cutoff` | Shift factors smaller than this are ignored in the dispatch |
 | `products` | The reserve products: direction, hours a battery must sustain them, minutes of ramp counted, the demand curve they count towards, and any MW of that curve reserved for them |

@@ -98,7 +98,21 @@ def test_rulebook_limits_hold(day):
     assert a['RRS-FFR'].sum() + a['RRS-UFR'].sum() <= 0.6 * need['RRS'] + 1e-6
     nclr = i.resources.name[i.resources.type == 'NCLR']
     assert a.loc[a.index.isin(nclr), 'ECRS'].sum() <= 0.5 * need['ECRS'] + 1e-6
-    assert out.system_lambda <= 5000 and {lim.name for lim in ercot.rules.latest.limits} == {'FFR', 'relay loads + FFR', 'ECRS from loads'}
+    assert out.system_lambda <= 5000 and {lim.name for lim in ercot.rules.latest.limits} == {'FFR', 'relay loads + FFR', 'ECRS from loads', 'Non-Spin from loads'}
+
+
+def test_non_spin_from_loads_is_the_requirement_less_the_largest_contingency(day):
+    t = pd.Timestamp(day.times[0])
+    plan = pd.DataFrame({'postedDatetime': [t - pd.Timedelta(days=1), t - pd.Timedelta(hours=6), t + pd.Timedelta(hours=1)],
+                         'deliveryDate': str(t.date()), 'hourEnding': f'{t.hour + 1:02d}:00', 'ancillaryType': 'NSPIN',
+                         'quantity': [9000, 1440, 8000], 'DSTFlag': False})
+    need = ercot.adapter.reserve_requirements(plan, t)                   # the latest posting made before the run
+    assert need.to_dict('records') == [{'product': 'NonSpin', 'mw': 1440.0}]
+    assert ercot.adapter.reserve_requirements(plan.assign(deliveryDate='2020-01-01'), t) is None
+    i = day.inputs(t)
+    nclr = i.resources.name[i.resources.type == 'NCLR']
+    held = lambda x: ercot.clear(x).reserve_awards.pipe(lambda a: a.loc[a.index.isin(nclr), 'NonSpin'].sum())
+    assert held(i.copy(reserve_requirements=need)) <= 1440 - 1430.2 + 1e-6   # (the cap's arithmetic is tested in test_core)
 
 
 def test_every_rule_number_is_an_input(day):

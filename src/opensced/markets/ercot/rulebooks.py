@@ -72,6 +72,9 @@ RTC_B = Rules(
               source='Protocols 3.16(4): load resources on under-frequency relays and FFR are limited to 60% of the RRS requirement'),
         Limit('ECRS from loads', ('ECRS',), max_share=0.50, of='ECRS', where=(('type', 'NCLR'),),
               source='Protocols 3.16(7): load resources other than controllable ones are limited to 50% of the ECRS requirement'),
+        Limit('Non-Spin from loads', ('NonSpin',), max_less=1430.2, of='NonSpin', where=(('type', 'NCLR'),),
+              source='AS methodology, Non-Spin: Non-Spin from SCED-dispatchable resources is at least the lower of the Most Severe '
+                     'Single Contingency and the hour\'s Non-Spin requirement'),
     ),
     price_cap=None,                          # = voll
     shift_factor_cutoff=0.0001,
@@ -97,6 +100,12 @@ RTC_B = Rules(
         'regulation_share': 'protocols 6.5.7.3(12): a scaling factor of 5/7 on Reg-Up against HDL and on Reg-Down against LDL',
         'price_cap': 'protocols 6.5.7.3(14)(d): system lambda and reserve prices are capped at the effective value of lost load, 5,000',
         'shift_factor_cutoff': 'protocols Section 22 Attachment P 3.3: default cutoff 0.0001',
+        'Non-Spin from loads': 'the methodology does not print the Most Severe Single Contingency. Measured on four days of 2026: with '
+                               'a Non-Spin requirement of 1,455 / 1,477 / 1,223 MW the non-controllable loads together hold exactly '
+                               '24.8 / 46.8 / 0 MW in every run of the hour (25.0 / 47.0 / 0 in the day-ahead market), at a clearing price '
+                               'above their offers; in every other hour they are awarded in full. That is the requirement less 1,430.2 MW '
+                               '(1,430 day-ahead). The requirement is the AS Plan (NP4-33-CD), not the demand curve\'s total MW: without '
+                               'the plan file the limit cannot bind',
         'limits': 'written as procurement rules (3.16 and the AS methodology, which says "DAM will limit"); applied here in real time too',
         'duration_hours': 'Section 8.1.1.3 qualification times: Reg-Up, Reg-Down and RRS-PFR 30 min, RRS-FFR 15 min, ECRS 1 h, Non-Spin 4 h. '
                           'Measured against ERCOT awards on seven days: about 361,000 battery-runs with upward awards, none breaks the '

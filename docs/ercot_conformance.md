@@ -23,6 +23,7 @@ reserve prices, is ERCOT's dispatch of each resource the best one the model's ro
 | RRS from fast frequency response at most 450 MW | AS methodology | MATCHES | Rulebook limit |
 | Relay loads plus fast frequency response at most 60% of RRS | 3.16(4) | MATCHES | Rulebook limit |
 | Non-controllable loads at most 50% of ECRS | 3.16(7) | MATCHES | Rulebook limit |
+| Non-Spin from non-controllable loads at most the requirement less the Most Severe Single Contingency | AS methodology | MATCHES | Rulebook limit; the 1,430.2 MW is measured, not printed |
 | Controllable Load Resources | 6.5.7.3(3) | MATCHES | Dispatched on their bid curves; their consumption leaves demand |
 | Regulation scaling of 5/7 | 6.5.7.3(12) | MATCHES | Was labelled reconstructed; it is written |
 | Prices capped at the value of lost load | 6.5.7.3(14)(d) | MATCHES | Lambda and reserve prices capped at $5,000 after the solve; node prices above it pulled down |
@@ -183,7 +184,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 71 | Maximum RRS from FFR | ASM L26; S3 3.16(2)(b) L5275 | "limited to 450 MW". | No limit on RRS-FFR. | MISSING |
 | 72 | Relay loads plus FFR share of RRS | S3 3.16(4) L5282 (current); L5284 grey box NPRR1128 keeps the 60%; ASM L26 | "shall be limited to 60% of the total ERCOT RRS requirement". The ASM words it as "DAM will limit". | No limit. | MISSING |
 | 73 | Non-controllable loads' share of ECRS | S3 3.16(7) L5287 | "limited to 50% of the total ERCOT ECRS requirement". | No limit. | MISSING |
-| 74 | Minimum Non-Spin from SCED-dispatchable Resources | ASM L41 | "shall not be less than lower of ERCOT's Most Severe Single Contingency (MSSC) value and the Non-Spin requirement for that hour". | No limit. | MISSING |
+| 74 | Minimum Non-Spin from SCED-dispatchable Resources | ASM L41 | "shall not be less than lower of ERCOT's Most Severe Single Contingency (MSSC) value and the Non-Spin requirement for that hour". | Rulebook limit `Non-Spin from loads`: non-controllable loads together hold at most the hour's Non-Spin requirement (AS Plan, NP4-33-CD) less 1,430.2 MW. The methodology does not print the MSSC; 1,430.2 is measured (72 runs on four days sit exactly on it, none of 6,335 runs on 22 days is above it). Needs the `dam_as_plan` file. | MATCHES (MSSC measured) |
 | 75 | Substitution or cascading between products | none found | No sentence in S6 6.5.7.3, S4 4.4.12 or S3 3.16-3.18 lets one product's MW count toward another's curve. Each product has its own curve. | No substitution. Only the three RRS sub-types share a curve. | NOT CHECKABLE FROM TEXT |
 | 76 | DRRS | S6 6.5.7.3(14)-(15) grey box L1276-1285; S3 3.17.5 grey box L5339-5343 | New product under NPRR1309. Grey box: not yet in effect. | Not modelled. | NOT APPLICABLE |
 

@@ -13,6 +13,7 @@ The reports, by the file name read_day() looks for (the name of the report's API
     60d_sced_resource_as_offers   60-Day SCED Disclosure, reserve offers           NP3-965-ER
     60_load_res_data_in_sced      60-Day SCED Disclosure, Load Resources           NP3-965-ER
     dam_sced_as_demand_curves     Ancillary Service Demand Curves                  NP4-212-CD   every point, as posted
+    dam_as_plan                   DAM Ancillary Service Plan                       NP4-33-CD    the hourly requirements
     shdw_prices_bnd_trns_const    SCED Shadow Prices and Binding Constraints       NP6-86-CD
     lmp_node_zone_hub             LMPs by Resource Node, Load Zone and Hub         NP6-788-CD   for scoring
     sced_system_lambda            SCED System Lambda                               NP6-322-CD   for scoring
@@ -77,7 +78,7 @@ CANON = {
     **{f'AS Awards {a}': f'ASAwards{a}' for a in ('ECRS', 'NSPIN', 'REGDN', 'REGUP', 'RRSFFR', 'RRSPFR', 'RRSUFR')},
 }
 FILES = {'gen': '60_sced_gen_res_data', 'esr': '60d_sced_esr_data', 'reserve_offers': '60d_sced_resource_as_offers',
-         'load_resources': '60_load_res_data_in_sced', 'reserve_demand': 'dam_sced_as_demand_curves',
+         'load_resources': '60_load_res_data_in_sced', 'reserve_demand': 'dam_sced_as_demand_curves', 'reserve_plan': 'dam_as_plan',
          'constraints': 'shdw_prices_bnd_trns_const', 'lmp': 'lmp_node_zone_hub', 'system_lambda': 'sced_system_lambda',
          'reserve_prices': 'rt_clear_price_cap_sced', 'aggregate_offers': '2day_agg_sced_as_offers',
          'reference_offers': 'reference_sced_resource_as_offers'}
@@ -442,6 +443,28 @@ def _reserve_demand(curves, when):
     return c[['product', 'mw', 'price']].apply(lambda s: pd.to_numeric(s) if s.name != 'product' else s).reset_index(drop=True)
 
 
+def reserve_requirements(plan, when):
+    """DAM Ancillary Service Plan -> the reserve_requirements table (product, mw) for the run's hour: each product's
+    requirement from the latest posting made before the run, else the first posting. None if the hour is not in the plan.
+    The Non-Spin demand curve runs far past the requirement, so limits written against the Non-Spin requirement need this."""
+    c = plan.copy()
+    c.columns = c.columns.str.strip()
+    t = pd.Timestamp(when)
+    c = c[(c['hourEnding'].astype(str).str.slice(0, 2).astype(int) == t.hour + 1).to_numpy()]
+    c = c[(pd.to_datetime(c['deliveryDate']).dt.date == t.date()).to_numpy()]
+    if 'DSTFlag' in c:
+        c = c[~_flag(c['DSTFlag'])]
+    if not len(c):
+        return None
+    posted = pd.to_datetime(c['postedDatetime']) if 'postedDatetime' in c else pd.Series(t, index=c.index)
+    out = []
+    for p, g in c.assign(_posted=posted).groupby('ancillaryType'):
+        before = g['_posted'][g['_posted'] <= t]
+        g = g[g['_posted'] == (before.max() if len(before) else g['_posted'].min())]
+        out.append({'product': PRODUCT.get(str(p).strip(), p), 'mw': float(pd.to_numeric(g['quantity']).iloc[0])})
+    return pd.DataFrame(out)
+
+
 def constraint_name(df):
     """The id this adapter gives a constraint: '<constraint name>|<from station>|<to station>|<contingency>'.
     Your shift_factors index must use the same ids."""
@@ -638,6 +661,8 @@ class Day:
         options.setdefault('reference_offers', self._habits)
         options.setdefault('battery_efficiency', self.battery_efficiency)
         options.setdefault('quick_start', self.quick_start)
+        if self.tables['reserve_plan'] is not None:
+            options.setdefault('reserve_requirements', reserve_requirements(self.tables['reserve_plan'], t))
         return inputs(self._by_run[t], None, cut('reserve_offers'), cut('load_resources'), curves,
                       cut('constraints'), cut('aggregate_offers'), shift_factors, resource_nodes, rules, **options)
 

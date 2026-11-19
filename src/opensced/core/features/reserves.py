@@ -15,7 +15,7 @@
               reserved    when a product has reserved_mw of its demand curve, the other products serving that curve
                           together get at most the curve's total MW less the reserved MW
               limits      rules.limits: the awards of a group of products, from all or some resources, add up to
-                          at most a number of MW or a share of a demand curve
+                          at most a number of MW, a share of a requirement, or a requirement less a number of MW
 
 Without reserve offers every resource with a limit may carry the product at $0.
 """
@@ -158,7 +158,8 @@ def demand_rows(P, S, inputs, rules):
             ok &= (S['table'][col].to_numpy() == val) if col in S['table'] else False
         cols = [P.start(f'r_{p}') + k for p in lim.products if p in S['rv'] for k, i in enumerate(S['rv'][p]) if ok[i]]
         share = lambda x: None if x is None else x * S['need'][lim.of]
-        hi = [v for v in (own(lim.name, 'max_mw', lim.max_mw), share(lim.max_share)) if v is not None]
+        less = None if lim.max_less is None else max(S['need'][lim.of] - lim.max_less, 0.0)
+        hi = [v for v in (own(lim.name, 'max_mw', lim.max_mw), share(lim.max_share), less) if v is not None]
         lo = [v for v in (own(lim.name, 'min_mw', lim.min_mw), share(lim.min_share)) if v is not None]
         if cols and hi:
             P.row(cols, [1.0] * len(cols), min(hi))

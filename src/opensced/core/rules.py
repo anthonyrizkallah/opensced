@@ -49,7 +49,9 @@ class Limit:
 
     products    the reserve products whose awards are added up
     max_mw      the cap in MW, and / or
-    max_share   the cap as a share of a requirement (`of`: the demand curve's name)
+    max_share   the cap as a share of a requirement (`of`: the demand curve's name), and / or
+    max_less    the cap as a requirement less this many MW, never below zero (`of` again). It says the same as "at least
+                this many MW, or the whole requirement if that is smaller, comes from the other resources"
     min_mw, min_share   a floor instead of, or as well as, a cap. A floor that cannot be met makes the interval unsolved
     where       count only resources whose column matches, e.g. {'type': 'NCLR'}. Default: every resource
     source      the rule it comes from"""
@@ -57,6 +59,7 @@ class Limit:
     products: tuple
     max_mw: float | None = None
     max_share: float | None = None
+    max_less: float | None = None
     min_mw: float | None = None
     min_share: float | None = None
     of: str | None = None
@@ -64,10 +67,10 @@ class Limit:
     source: str = ''
 
     def __post_init__(self):
-        if all(v is None for v in (self.max_mw, self.max_share, self.min_mw, self.min_share)):
+        if all(v is None for v in (self.max_mw, self.max_share, self.max_less, self.min_mw, self.min_share)):
             raise ValueError(f'limit {self.name!r}: give max_mw or max_share (or min_mw, min_share)')
-        if (self.max_share is not None or self.min_share is not None) and self.of is None:
-            raise ValueError(f'limit {self.name!r}: max_share needs `of`, the demand curve it is a share of')
+        if (self.max_share is not None or self.min_share is not None or self.max_less is not None) and self.of is None:
+            raise ValueError(f'limit {self.name!r}: max_share and max_less need `of`, the demand curve they are measured against')
 
 
 @dataclass(frozen=True)

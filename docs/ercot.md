@@ -21,6 +21,7 @@ naming styles work: the website's files ("Base Point") and the API's ("basePoint
 | `60d_sced_resource_as_offers` | 60-Day SCED Disclosure, reserve offers | NP3-965-ER | Reserve offers |
 | `60_load_res_data_in_sced` | 60-Day SCED Disclosure, Load Resources | NP3-965-ER | Reserves from loads |
 | `dam_sced_as_demand_curves` | Ancillary Service Demand Curves | NP4-212-CD | Reserve demand |
+| `dam_as_plan` | DAM Ancillary Service Plan | NP4-33-CD | The hourly reserve requirements. Needed for the limit on Non-Spin from non-controllable loads |
 | `shdw_prices_bnd_trns_const` | SCED Shadow Prices and Binding Transmission Constraints | NP6-86-CD | Constraints |
 | `lmp_node_zone_hub` | LMPs by Resource Node, Load Zone and Hub | NP6-788-CD | Scoring |
 | `sced_system_lambda` | SCED System Lambda | NP6-322-CD | Scoring |

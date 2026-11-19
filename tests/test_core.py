@@ -161,8 +161,13 @@ def test_a_limit_caps_a_group_of_products_or_some_resources():
     assert run(Limit('fast', ('Fast',), max_share=0.5, of='Up'), Limit('slow', ('Slow',), max_mw=0.0))['Fast'] == pytest.approx(30.0)
     loads_only = run(Limit('loads', ('Fast', 'Slow'), max_mw=10.0, where=(('type', 'LOAD'),)), Limit('slow', ('Slow',), max_mw=0.0))
     assert loads_only['Fast'] == pytest.approx(10.0)
+    left = lambda mw: run(Limit('loads', ('Fast',), max_less=mw, of='Up', where=(('type', 'LOAD'),)), Limit('slow', ('Slow',), max_mw=0.0))['Fast']
+    assert left(45.0) == pytest.approx(15.0)                             # a 60 MW requirement less 45 MW
+    assert left(80.0) == pytest.approx(0.0)                              # never below zero
     with pytest.raises(ValueError, match='max_mw or max_share'):
         Limit('bad', ('Fast',))
+    with pytest.raises(ValueError, match='need `of`'):
+        Limit('bad', ('Fast',), max_less=10.0)
 
 
 def test_prices_are_capped_after_the_solve_when_the_rulebook_says_so():
