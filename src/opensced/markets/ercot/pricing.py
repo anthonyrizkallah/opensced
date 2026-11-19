@@ -10,19 +10,24 @@ actions undone and adds the difference to settlement prices:
 The pricing run changes these inputs:
 
     (a)  a RUC-committed unit (status ONRUC, not opted out of RUC settlement), or one named in `rmr`: LSL and LDL to
-         zero, its reserve offers removed, and all its capacity offered at the power balance penalty price. The text
-         gives that offer for "the first step"; ERCOT's adders are only reproduced when it holds in the final step too
-         (March 23, 2026 at 21:50: $294.78 against ERCOT's $286.92; on the unit's own $250 curve, $4.01)
+         zero, its reserve offers removed, and for the first step all its capacity offered at the power balance
+         penalty price
     (c)-(e)  every other on-line resource SCED can move: LDL and HDL widened to what it can reach in 60 minutes from
          its telemetered output (not past LSL and HSL)
     (f)  the MW of non-controllable Load Resources that were deployed are added to demand, with a virtual offer for
          the same MW priced from $300 for the first MW to $700 for the last
     (g)-(k)  other deployed MW (ERS, DC tie and block load transfer adjustments) added to or taken off demand
-    (l)-(n)  the two-step clearing again, from the offer curves before mitigation: step 1 on competitive constraints,
-         with RUC and RMR units offered at the power balance penalty price; then mitigation against step 1's prices;
-         then step 2 on every constraint. Give `unmitigated` (the same run built from ERCOT's step 1 curves, see
-         unmitigated_inputs) for this. Without it the pricing run is one solve on the curves as given, which is
-         only right when no offer cap would bind differently
+    (l)-(n)  the two-step clearing again. Step 1 on competitive constraints only, RUC and RMR units at the penalty
+         price; each resource's price in it is its reference price. Step 2 on every constraint. In step 2 a RUC or
+         RMR unit that is subject to mitigation (Protocols 3.19.4, 6.5.7.3(14)(b)(i)) has its penalty-price curve
+         capped at its reference price, so it comes back wherever step 2 would otherwise price above step 1. One that
+         is not subject to mitigation stays at the penalty price. Checked on ERCOT's adders both ways:
+           August 23, 2026 at 20:00, RUC units mitigated: ERCOT $39.86; capped $39.7; left at the penalty price $209.76
+           March 23, 2026 at 21:50, RUC units not mitigated: ERCOT $286.92; at the penalty price $294.78; capped $105.26
+         Who is subject to mitigation is an input (`mitigated`): the competitiveness test is not run here.
+         mitigated_in_hour() reads it off ERCOT's own curves.
+         Every other resource keeps the curve it was given. Give `unmitigated` (the same run built from ERCOT's step 1
+         curves, see unmitigated_inputs) to redo their mitigation against the pricing run's own reference prices too
 
 With no reliability action in the interval there is no pricing run and the adders are zero.
 
@@ -65,6 +70,14 @@ class PricingRun:
                 f'  {self.relaxed_mw:,.1f} MW of RUC/RMR low limits relaxed, {self.added_demand_mw:,.1f} MW added to demand')
 
 
+def relaxed_units(inputs, rmr=(), opted_out=()):
+    """Names of the units the pricing run prices out: ONRUC and not opted out, or named in rmr."""
+    r = inputs.resources
+    status = r['status'].astype(str).to_numpy() if 'status' in r else np.full(len(r), '')
+    m = (np.isin(status, RUC_STATUSES) & ~r['name'].isin(set(opted_out)).to_numpy()) | r['name'].isin(set(rmr)).to_numpy()
+    return list(r['name'][m])
+
+
 def pricing_inputs(inputs, deployed_load_mw=0.0, other_demand_mw=0.0, rmr=(), opted_out=(), ramp_minutes=RAMP_MINUTES,
                    keep_binding_limits=False, deployed_load_bid=DEPLOYED_LOAD_BID, deployed_load_node=None, penalty_price=None):
     """The dispatch run's Inputs changed as 6.5.7.3.1(2)(a)-(k) says. -> (Inputs, MW of low limits relaxed)
@@ -73,8 +86,8 @@ def pricing_inputs(inputs, deployed_load_mw=0.0, other_demand_mw=0.0, rmr=(), op
     other_demand_mw    net MW of the other reliability deployments to add to demand (ERS, DC tie, BLT)
     rmr                names of Reliability Must-Run units that are on line
     opted_out          names of ONRUC units whose QSE opted out of RUC settlement (6.5.7.3.1(1)(a)): they are left as
-                       they are. ERCOT does not publish who opted out. below_ruc_floor() is one guess (units offering
-                       under the $250 RUC floor); check the relaxed MW against ERCOT's RTRRUC before trusting it
+                       they are. ERCOT does not publish who opted out; opted_out_from_relaxed() works it out from the
+                       relaxed MW ERCOT does publish (RTRRUC)
     penalty_price      $/MWh for a RUC or RMR unit's capacity. Default: the rulebook's shortage price
     keep_binding_limits   leave a limit where the base point sat on it (NPRR904's wording, not yet in force: with no
                           reliability action ERCOT's adders are matched only when every limit is widened)
@@ -137,13 +150,12 @@ def below_ruc_floor(inputs):
     return sorted(under & set(r['name'][np.isin(r['status'].astype(str), RUC_STATUSES)]))
 
 
-def unmitigated_inputs(day, time, **options):
-    """A run's Inputs from ERCOT's step 1 (unmitigated) curves, with the resources ERCOT capped marked `mitigated` and
-    their caps taken from ERCOT's own step 2 curves. day: an ERCOT Day. options: as for day.inputs().
+def capped_by_ercot(day, time):
+    """The resources ERCOT capped in one run, read off its curves: step 2 curve below step 1 curve.
+    -> (names, table resource, mw, price of their step 2 curves)
 
-    A resource was capped where its step 2 curve is below its step 1 curve. Its step 2 curve is then the cap ERCOT
-    applied in the dispatch run: the higher of its mitigated offer cap and that run's reference price. In the pricing
-    run the cap is the higher of that curve and the pricing run's own reference price."""
+    This only sees a cap that bit. A mitigated resource whose reference price is above its whole offer curve looks
+    the same as one that is not mitigated."""
     from opensced.markets.ercot.adapter import NPT, RES
     x = day._by_run[pd.Timestamp(time)].reset_index(drop=True)
     num = lambda c: pd.to_numeric(x[c], errors='coerce').to_numpy(float) if c in x else np.full(len(x), np.nan)
@@ -164,18 +176,72 @@ def unmitigated_inputs(day, time, **options):
         if (np.interp(q, m2[i][b][o2], p2[i][b][o2]) < np.interp(q, m1[i][a][o1], p1[i][a][o1]) - 0.011).any():
             capped.append(names[i])
             caps.append(pd.DataFrame({'resource': names[i], 'mw': m2[i][b][o2], 'price': p2[i][b][o2]}))
-    table = pd.concat(caps, ignore_index=True) if caps else None
+    return capped, (pd.concat(caps, ignore_index=True) if caps else None)
+
+
+def mitigated_in_hour(day, time):
+    """Names of the resources ERCOT's curves show as capped in any run of the Operating Hour `time` is in.
+
+    Mitigation, once applied to a resource, stays for the rest of the Operating Hour (3.19.4), and a cap can only be
+    seen in a run where it bit, so the hour is read as a whole. A resource whose reference price stayed above its
+    offer curve all hour cannot be told apart from one that was never mitigated: it is left out."""
+    t = pd.Timestamp(time)
+    names = set()
+    for u in day.times:
+        if pd.Timestamp(u).floor('h') == t.floor('h'):
+            names |= set(capped_by_ercot(day, u)[0])
+    return sorted(names)
+
+
+def opted_out_from_relaxed(inputs, relaxed_mw, tolerance=1.0, rmr=()):
+    """Names of the ONRUC units left out of ERCOT's pricing run, worked out from the RUC capacity it says it relaxed
+    (RTRRUC in the Real-Time Price Adders report). -> list of names, or None when no set of units adds up
+
+    ERCOT does not publish who opted out of RUC settlement, but it does publish the total low limit it set to zero.
+    The units whose low dispatch limits add up to that total are the ones it relaxed; the rest were left alone.
+    With several sets within the tolerance, the one leaving out the fewest units is taken."""
+    from itertools import combinations
+    r = inputs.resources
+    names = relaxed_units(inputs, rmr)
+    if not names:
+        return []
+    x = r.set_index('name')
+    low = np.maximum(x['low'], x['ramp_low'].fillna(x['low']) if 'ramp_low' in x else x['low']).clip(lower=0.0).reindex(names).to_numpy(float)
+    if len(names) > 16:
+        return None
+    for k in range(len(names) + 1):                                      # leave out as few as possible
+        best = None
+        for out in combinations(range(len(names)), k):
+            miss = abs(low.sum() - low[list(out)].sum() - float(relaxed_mw))
+            if miss <= tolerance and (best is None or miss < best[0]):
+                best = (miss, out)
+        if best is not None:
+            return [names[i] for i in best[1]]
+    return None
+
+
+def unmitigated_inputs(day, time, **options):
+    """A run's Inputs from ERCOT's step 1 (unmitigated) curves, with the resources ERCOT capped marked `mitigated` and
+    their caps taken from ERCOT's own step 2 curves. day: an ERCOT Day. options: as for day.inputs().
+
+    A resource was capped where its step 2 curve is below its step 1 curve. Its step 2 curve is then the cap ERCOT
+    applied in the dispatch run: the higher of its mitigated offer cap and that run's reference price. In the pricing
+    run the cap is the higher of that curve and the pricing run's own reference price."""
+    capped, table = capped_by_ercot(day, time)
     return day.inputs(time, curve='SCED1', mitigated=capped, mitigated_offer_caps=table, **options)
 
 
-def pricing_run(inputs, rules=None, dispatch=None, unmitigated=None, always=False, **changes):
+def pricing_run(inputs, rules=None, dispatch=None, unmitigated=None, always=False, mitigated=None, **changes):
     """Clear the dispatch run and the pricing run and take the adders. -> PricingRun
 
     inputs       the dispatch run's Inputs (from ercot.inputs() or Day.inputs())
     rules        the rulebook. Default: the one in force at inputs.time
     dispatch     the dispatch run's Result, if already cleared
-    unmitigated  the same run from ERCOT's step 1 curves (unmitigated_inputs). The pricing run then repeats the two-step
-                 clearing as 6.5.7.3.1(2)(l)-(n) says
+    unmitigated  the same run from ERCOT's step 1 curves (unmitigated_inputs). Every resource's curve is then mitigated
+                 again against the pricing run's reference prices, not only the RUC and RMR units'
+    mitigated    names of the resources subject to mitigation in the interval (mitigated_in_hour). Only matters for
+                 RUC and RMR units: one named here is capped at its step 1 price in step 2, any other stays at the
+                 penalty price. Default: the ones marked `mitigated` in inputs.resources
     always       run the pricing solve even when no reliability action is active. By default the adders are zero then:
                  6.5.7.3.1(2) determines them only "for intervals where there are reliability deployments". Some
                  deployments are not in ERCOT's published report (off-line Non-Spin brought on line, for one); pass
@@ -190,7 +256,9 @@ def pricing_run(inputs, rules=None, dispatch=None, unmitigated=None, always=Fals
     if not acted and not always:                                         # nothing was deployed: there is no pricing run
         zero = pd.Series(0.0, index=dispatch.reserve_prices.index, name='adder') if dispatch.reserve_prices is not None else pd.Series(dtype=float, name='adder')
         return PricingRun(dispatch, dispatch, 0.0, zero, 0.0, 0.0)
-    if unmitigated is None:
+    source = inputs if unmitigated is None else unmitigated
+    units = relaxed_units(source, changes.get('rmr', ()), changes.get('opted_out', ()))
+    if unmitigated is None and not units:                                # only demand was added: one solve
         priced = clear(changed, rules, check=False)
     else:
         step1 = _clear_once(mitigation.competitive_only(changed), rules)
@@ -199,7 +267,14 @@ def pricing_run(inputs, rules=None, dispatch=None, unmitigated=None, always=Fals
         else:
             step1._inputs = changed
             reference = step1.resource_prices().rename('reference_price')
-            priced = _clear_once(changed.copy(energy_offers=mitigation.mitigate(changed, reference, rules), mitigated=True), rules)
+            offers = changed.energy_offers if unmitigated is None else mitigation.mitigate(changed, reference, rules)
+            flagged = set(mitigated) if mitigated is not None else (set(source.resources['name'][source.resources['mitigated'].fillna(False).astype(bool)]) if 'mitigated' in source.resources else set())
+            capped = [n for n in units if n in flagged and n in reference.index and np.isfinite(reference[n])]
+            if capped:                                                   # (m): a mitigated priced-out unit is capped at its reference price
+                high = changed.resources.set_index('name')['high']
+                cap = pd.DataFrame([{'resource': n, 'mw': mw, 'price': float(reference[n])} for n in capped for mw in (0.0, float(high[n]))])
+                offers = pd.concat([offers[~offers['resource'].isin(set(capped))], cap], ignore_index=True)
+            priced = _clear_once(changed.copy(energy_offers=offers, mitigated=True), rules)
             priced.reference_prices, priced.step1 = reference, step1
     energy = max(priced.system_lambda - dispatch.system_lambda, 0.0) if priced.solved and dispatch.solved else float('nan')
     if priced.reserve_prices is not None and dispatch.reserve_prices is not None:

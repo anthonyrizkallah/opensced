@@ -290,3 +290,30 @@ def test_pricing_run_prices_out_ruc_units_and_adds_deployed_loads():
     assert pricing.below_ruc_floor(low) == ['ruc']
     opted = pricing.pricing_run(low, rules, opted_out=['ruc'])           # opted out of RUC settlement: left alone
     assert opted.relaxed_mw == 0.0 and opted.energy_adder == pytest.approx(0.0, abs=1e-6)
+
+
+def test_pricing_run_caps_mitigated_ruc_units_at_their_step_one_price():
+    from opensced.markets.ercot import pricing
+    rules = opensced.Rules(shortage_price=5001.0, block_refine=3)
+    c = _small_system()
+    line = pd.DataFrame([{'name': 'line', 'limit': 80.0, 'flow': 100.0, 'max_shadow_price': 3500.0, 'competitive': False}])
+    c = c.copy(constraints=line, shift_factors=pd.DataFrame([[1.0, 0.0, 0.0]], index=['line'], columns=['cheap', 'ruc', 'dear']))
+    left = pricing.pricing_run(c, rules)                                   # not subject to mitigation: stays at the penalty price
+    assert left.pricing.dispatch['ruc'] == pytest.approx(0.0, abs=0.01) and left.energy_adder == pytest.approx(80.0, abs=0.3)
+    p = pricing.pricing_run(c, rules, mitigated=['ruc'])
+    assert p.dispatch.system_lambda == pytest.approx(160.0, abs=0.2)       # cheap held to 80, ruc at 40, dear at 30
+    assert p.pricing.step1.system_lambda == pytest.approx(200.0, abs=0.2)  # step 1, the line left out: ruc priced out, dear at 50
+    assert p.pricing.reference_prices['ruc'] == pytest.approx(200.0, abs=0.2)
+    # step 2, the line back: dear would need 70 MW at $240, so the RUC unit comes back at its $200 reference price
+    assert p.pricing.dispatch['ruc'] == pytest.approx(20.0, abs=0.5) and p.energy_adder == pytest.approx(40.0, abs=0.3)
+
+
+def test_opted_out_units_are_read_off_the_relaxed_capacity():
+    from opensced.markets.ercot import pricing
+    c = _small_system()
+    extra = c.resources[c.resources.name == 'ruc'].assign(name='ruc2', low=25.0, ramp_low=25.0, output=25.0, telemetered=25.0)
+    c = c.copy(resources=pd.concat([c.resources, extra], ignore_index=True),
+               energy_offers=pd.concat([c.energy_offers, pd.DataFrame({'resource': 'ruc2', 'mw': [0.0, 60.0], 'price': 250.0})], ignore_index=True))
+    assert pricing.opted_out_from_relaxed(c, 65.0) == []                 # both relaxed
+    assert pricing.opted_out_from_relaxed(c, 40.0) == ['ruc2'] and pricing.opted_out_from_relaxed(c, 25.0) == ['ruc']
+    assert pricing.opted_out_from_relaxed(c, 0.0) == ['ruc', 'ruc2'] and pricing.opted_out_from_relaxed(c, 50.0) is None
