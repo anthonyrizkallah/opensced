@@ -132,7 +132,10 @@ def _sced_tables(x, rules, storage_types=STORAGE_TYPES, curve_points=NPT, curve=
     typ = x['Resource Type'].astype(str).str.strip().to_numpy() if 'Resource Type' in x else np.full(len(x), '')
     ldl, hdl, lsl, hsl = (_num(x, c) for c in ('LDL', 'HDL', 'LSL', 'HSL'))
     bp = np.nan_to_num(_num(x, 'Base Point'))
-    lo, hi = np.fmax(ldl, lsl), np.fmin(hdl, hsl)
+    if rules.dispatch_limits == 'ramp':                                  # SCED moves a resource between LDL and HDL
+        lo, hi = np.where(np.isfinite(ldl), ldl, lsl), np.where(np.isfinite(hdl), hdl, hsl)
+    else:
+        lo, hi = np.fmax(ldl, lsl), np.fmin(hdl, hsl)
     can = {st.name for st in rules.statuses if st.dispatchable}
     held = {st.name for st in rules.statuses if not st.dispatchable and st.reserves}
     disp = np.isin(status, list(can)) & np.isfinite(lo) & np.isfinite(hi) & (hi >= lo)
@@ -156,8 +159,9 @@ def _sced_tables(x, rules, storage_types=STORAGE_TYPES, curve_points=NPT, curve=
     offers = pd.DataFrame({'resource': names[ri], 'mw': M[ok], 'price': Pr[ok]})
     bare = np.where(disp & (hi - lo > tol) & ~ok.any(axis=1))[0]         # no curve: the wind and solar proxy, 6.5.7.3(4)(c)
     if len(bare):
+        a, b = np.fmax(ldl, lsl)[bare], np.fmin(hdl, hsl)[bare]         # the proxy is anchored on LSL and HSL, inside the range
         proxy = pd.DataFrame({'resource': np.repeat(names[bare], 3),
-                              'mw': np.c_[lo[bare], np.maximum(hi[bare] - rules.proxy_mw_step, lo[bare]), hi[bare]].ravel(),
+                              'mw': np.c_[a, np.maximum(b - rules.proxy_mw_step, a), b].ravel(),
                               'price': np.tile((rules.offer_floor, rules.offer_floor + rules.proxy_price_step, rules.irr_proxy_price), len(bare))})
         offers = pd.concat([offers, proxy], ignore_index=True)
     soc, smin, smax = _num(x, 'SOC'), _num(x, 'minSOC'), _num(x, 'maxSOC')

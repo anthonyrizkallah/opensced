@@ -1,6 +1,7 @@
 """Energy: each dispatchable resource's offer curve cut into blocks, and the power balance.
 
-A resource may move between lo = max(ramp_low, low) and hi = min(ramp_high, high). Its curve is cut at its own points
+A resource may move between lo = max(ramp_low, low) and hi = min(ramp_high, high), or between ramp_low and ramp_high
+alone under rules.dispatch_limits = 'ramp'. Its curve is cut at its own points
 and into steps of at most rules.block_mw, each priced at the curve's value at the step's midpoint (the curve is linear
 in price between points and flat beyond the ends). A resource that is not dispatchable is held at its output.
 

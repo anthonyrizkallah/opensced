@@ -34,7 +34,7 @@ def _prepare(inputs, rules, focus=None):
     ramp_low, ramp_high = np.where(np.isnan(ramp_low), low, ramp_low), np.where(np.isnan(ramp_high), high, ramp_high)
     output = np.nan_to_num(_col(r, 'output', 0.0))
     can = r['dispatchable'].fillna(False).to_numpy(bool) if 'dispatchable' in r else np.ones(len(r), bool)
-    lo, hi = np.fmax(ramp_low, low), np.fmin(ramp_high, high)
+    lo, hi = (ramp_low, ramp_high) if rules.dispatch_limits == 'ramp' else (np.fmax(ramp_low, low), np.fmin(ramp_high, high))
     disp = can & np.isfinite(lo) & np.isfinite(hi) & (hi >= lo)
     lo, hi = np.where(disp, lo, output), np.where(disp, hi, output)
     S = dict(n=len(r), table=r, names=names, at={n: i for i, n in enumerate(names)}, disp=disp, lo=lo, hi=hi, low=low, high=high,
@@ -97,10 +97,9 @@ def _clear_once(inputs, rules):
         if not result.solved:
             break
         fine = step / rules.block_refine_factor
-        lo, hi = result._range
-        inside = (result.dispatch.to_numpy() > lo + rules.tolerance_mw) & (result.dispatch.to_numpy() < hi - rules.tolerance_mw)
-        for name, mw in result.dispatch[inside].items():                 # a resource at a limit is not priced by its curve
-            focus.setdefault(name, []).append((float(mw), step, fine))
+        lo, hi = result._range                                           # a resource at a limit is cut finer too: where its
+        for name, mw in result.dispatch[hi - lo > rules.tolerance_mw].items():   # curve slopes away from the limit, the first
+            focus.setdefault(name, []).append((float(mw), step, fine))   # coarse step may be all that kept it there
         result, step = _solve(inputs, rules, focus), fine
     return result
 

@@ -41,7 +41,7 @@ on August 12, 2026 are unchanged by the refactor (system lambda error $0.108, no
 | What | Why it is not there yet |
 |---|---|
 | The competitiveness test (which resources are capped in a run) | Needs ownership by decision-making entity. The resulting set is an input |
-| The pricing run: deployments, relaxed limits, price adders | A second solve that changes settlement prices, not LMPs |
+| The pricing run: deployments, relaxed limits, price adders | `opensced.markets.ercot.pricing.pricing_run()`; ERS restoration and the DC Tie adjustment are not modelled |
 | A load may not hold Non-Spin with RRS or ECRS | Needs a yes/no choice per load |
 | Building the demand curves from the requirement (4.4.12) | The fitted curve parameters are posted outside the documents read, and two formulas were lost in conversion |
 | Caps for irresolvable and stability-limit constraints | Formulas lost in conversion; the published cap per constraint is an input already |
@@ -369,7 +369,7 @@ The adders change settlement prices, not the LMPs of the binding run.
 | Block Load Transfer MW | S6 6.5.7.3.1(1)(g)-(h) L1319-1320, (2)(j)-(k) L1380-1381 | per run | none | operator instruction | none | ABSENT |
 | TDSP load management MW (pending NPRR1006), distribution voltage reduction (pending NPRR1105), Voluntary Early Curtailment Load (pending NPRR1238) | S6 L1321-1325, L1329-1330, L1363, L1383 | per run | VECL: "$300/MWh" to "$700/MWh", "30-minute ramp period", "one-hour restoration period" | ERCOT | none | ABSENT (pending) |
 | Firm load shed in EEA Level 3 | S6 6.5.7.3.1(1)(i) L1328, (2)(o)-(p) L1387-1388 | per run | adder = "the VOLL used to determine the ASDCs for the RTM minus the System Lambda" | operator | none | ABSENT |
-| The pricing run's own two steps | S6 6.5.7.3.1(2)(l)-(n) L1384-1386 | per run | Competitive Constraints only, then mitigation, then all constraints | ERCOT calculation | none | ABSENT (needs 1.11) |
+| The pricing run's own two steps | S6 6.5.7.3.1(2)(l)-(n) L1384-1386 | per run | Competitive Constraints only, then mitigation, then all constraints | ERCOT calculation | `pricing_run(unmitigated=...)` runs both steps; a mitigated RUC or RMR unit is capped at its step-1 price | PARTIAL (which resources are mitigated is read from ERCOT's data) |
 | Energy adder and reserve adders | S6 6.5.7.3.1(2)(o)-(p) L1387-1388 | per run | "the positive difference" of the two System Lambdas; per product, of the two MCPCs | ERCOT calculation | none | ABSENT |
 
 ### 1.13 Timing and solver settings

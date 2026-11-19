@@ -95,6 +95,9 @@ class Rules:
     shortage_price            $/MWh when supply cannot meet demand
     surplus_price             $/MWh when supply cannot be backed down far enough (negative)
     default_max_shadow_price  $/MWh for a constraint that comes without its own
+    dispatch_limits           'both': a resource moves between max(ramp_low, low) and min(ramp_high, high). 'ramp': between
+                              ramp_low and ramp_high alone, for a market whose dispatch range is not clipped to the
+                              sustained limits
     block_mw                  offer curves are cut into steps of at most this many MW
     block_refine              times the interval is solved again with every curve cut finer around where its resource
                               landed. Each pass cuts block_refine_factor times finer. 0: steps of block_mw only
@@ -151,6 +154,7 @@ class Rules:
     offer_floor: float = -250.0
     shortage_adder: float = 0.0
     default_max_shadow_price: float = 5251.0
+    dispatch_limits: str = 'both'
     block_mw: float = 5.0
     block_refine: int = 0
     offer_curves: str = 'steps'

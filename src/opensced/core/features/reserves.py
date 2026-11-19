@@ -6,8 +6,8 @@
   objective   + offer price x z   - demand curve price x q
   rows        ramp        p + share x regulation-up   <= ramp_high        (rules.regulation_share)
                           p - share x regulation-down >= ramp_low
-              headroom    p + all up awards           <= high
-                          p - all down awards         >= low
+              headroom    p + all up awards           <= high   (or the top of the dispatch range, if that is higher)
+                          p - all down awards         >= low    (or the bottom of the dispatch range, if lower)
               offers      sum over products of z[j]   <= block MW  (one MW serves one product)
                           r[i, s]                     <= sum of z over i's blocks for s
               demand      sum of q[d]                 <= sum of r[., s] over the products s serving demand curve d
@@ -117,10 +117,10 @@ def resource_rows(P, S, rules):
                 P.row(bl + [r], [-1.0] * len(bl) + [share], lo - ldl)
         ups = [c for c in (rcol(P, S, p, i) for p in up) if c is not None]
         if ups:                                                          # a held resource carries reserves only
-            P.row(bl + ups, [1.0] * (len(bl) + len(ups)), hsl - lo if S['disp'][i] else max(hsl - lo, 0.0))
+            P.row(bl + ups, [1.0] * (len(bl) + len(ups)), max(hsl, S['hi'][i]) - lo)   # never tighter than the dispatch range
         downs = [c for c in (rcol(P, S, p, i) for p in down) if c is not None]
         if downs:
-            P.row(bl + downs, [-1.0] * len(bl) + [1.0] * len(downs), lo - lsl)
+            P.row(bl + downs, [-1.0] * len(bl) + [1.0] * len(downs), lo - min(lsl, lo))
 
 
 def offer_rows(P, S):

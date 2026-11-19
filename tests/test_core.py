@@ -350,3 +350,22 @@ def test_exact_curves_agree_with_refined_steps():
     c.reserve_demand = pd.DataFrame({'product': 'Up', 'mw': [0.0, 30.0], 'price': [50.0, 50.0]})
     a, b = clear(c, RESERVE.replace(offer_curves='exact')), clear(c, RESERVE.replace(block_refine=4))
     assert a.system_lambda == pytest.approx(b.system_lambda, abs=0.02) and a.reserve_prices['Up'] == pytest.approx(b.reserve_prices['Up'], abs=0.02)
+
+
+def test_a_curve_that_slopes_away_from_a_limit_is_refined_there_too():
+    res = pd.DataFrame([{'name': 'quick', 'low': 0.0, 'high': 30.0}, {'name': 'base', 'low': 0.0, 'high': 100.0}])
+    off = pd.DataFrame([{'resource': 'quick', 'mw': 0.0, 'price': -250.0}, {'resource': 'quick', 'mw': 1.0, 'price': 2000.0},
+                        {'resource': 'quick', 'mw': 30.0, 'price': 2000.0},
+                        {'resource': 'base', 'mw': 0.0, 'price': 200.0}, {'resource': 'base', 'mw': 100.0, 'price': 200.0}])
+    c = Inputs(resources=res, demand=50.0, energy_offers=off)
+    assert clear(c).dispatch['quick'] == pytest.approx(0.0)               # its first whole step costs 875: left at its limit
+    out = clear(c, Rules(block_refine=3))
+    assert out.dispatch['quick'] == pytest.approx(0.2, abs=0.01)          # the line from -250 to 2,000 meets 200 at 0.2 MW
+    assert out.system_lambda == pytest.approx(200.0)
+
+
+def test_dispatch_limits_ramp_lets_the_ramp_range_reach_past_the_sustained_limits():
+    c = case({'wind': (0, 16.0, -30.0), 'dear': (0, 100, 50.0)}, 60)
+    c.resources['ramp_high'] = [16.03, 100.0]
+    assert clear(c).dispatch['wind'] == pytest.approx(16.0)
+    assert clear(c, Rules(dispatch_limits='ramp')).dispatch['wind'] == pytest.approx(16.03)

@@ -62,6 +62,7 @@ RTC_B = Rules(
     surplus_price=-250.0,
     default_max_shadow_price=5251.0,
     block_mw=5.0,
+    dispatch_limits='ramp',
     interval_hours=5 / 60,
     regulation_share=5 / 7,
     products=_products(pfr_reserved_mw=1365.0),
@@ -89,6 +90,10 @@ RTC_B = Rules(
         'shortage_price': 'protocols: effective value of lost load 5,000 + effective system-wide offer cap 2,000 + 4,052.01',
         'surplus_price': 'protocols: the over-generation penalty',
         'default_max_shadow_price': 'a fallback, used only when ERCOT publishes a constraint without its maximum shadow price',
+        'dispatch_limits': 'protocols 6.5.7.3: SCED dispatches each resource between its LDL and HDL. Measured on three days of 2026: '
+                           'about 200 resources per run have an HDL up to 0.05 MW above their HSL (6 MW per run in all), and the base point '
+                           'follows the HDL on nearly nine in ten of them; no base point is above its HDL beyond rounding. With reserves '
+                           'awarded, base point + upward awards stays within the higher of HSL and HDL',
         'regulation_share': 'protocols 6.5.7.3(12): a scaling factor of 5/7 on Reg-Up against HDL and on Reg-Down against LDL',
         'price_cap': 'protocols 6.5.7.3(14)(d): system lambda and reserve prices are capped at the effective value of lost load, 5,000',
         'shift_factor_cutoff': 'protocols Section 22 Attachment P 3.3: default cutoff 0.0001',
