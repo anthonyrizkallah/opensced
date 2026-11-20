@@ -9,7 +9,7 @@
               headroom    p + all up awards           <= high   (or the top of the dispatch range, if that is higher)
                           p - all down awards         >= low    (or the bottom of the dispatch range, if lower)
               offers      sum over products of z[j]   <= block MW  (one MW serves one product)
-                          r[i, s]                     <= sum of z over i's blocks for s
+                          r[i, s]                      = sum of z over i's blocks for s
               demand      sum of q[d]                 <= sum of r[., s] over the products s serving demand curve d
                                                                   (its dual is the clearing price)
               reserved    when a product has reserved_mw of its demand curve, the other products serving that curve
@@ -133,8 +133,10 @@ def offer_rows(P, S):
         by_award.setdefault((i, p), []).append(zst + k)
     for j, zs in by_block.items():
         P.row(zs, [1.0] * len(zs), S['OB'][j][1])
-    for (i, p), zs in by_award.items():
-        P.row([rcol(P, S, p, i)] + zs, [1.0] + [-1.0] * len(zs), 0.0)
+    for (i, p), zs in by_award.items():                                  # an award is exactly the offer MW used for it:
+        r = rcol(P, S, p, i)                                             # with "at most", a block priced below zero (self-
+        P.row([r] + zs, [1.0] + [-1.0] * len(zs), 0.0)                   # provided reserves) could be counted as used, and
+        P.row([r] + zs, [-1.0] + [1.0] * len(zs), 0.0)                   # its price collected, with nothing awarded
 
 
 def demand_rows(P, S, inputs, rules):

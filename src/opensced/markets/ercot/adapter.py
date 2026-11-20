@@ -44,6 +44,7 @@ How a SCED run becomes the tables
     constraints every constraint ERCOT reported in the run, with its reported flow, limit and maximum shadow price.
 """
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -389,7 +390,7 @@ def _load_tables(L, rules, controllable=True, load_room='consumption-lpc'):
         hdl, ldl = raw('HDL'), raw('LDL')
         hdl, ldl = np.where(np.isfinite(hdl), hdl, use), np.where(np.isfinite(ldl), ldl, use)
         most, least = np.maximum(num('maxPowerConsumption'), hdl), np.minimum(num('lowPowerConsumption'), ldl)
-        disp = c & online & has_bid & (hdl - ldl > rules.tolerance_mw)
+        disp = c & online & (hdl - ldl > rules.tolerance_mw)             # with no bid it gets ERCOT's proxy bid (below)
         res.append(pd.DataFrame({'name': names[c], 'low': -most[c], 'high': -least[c], 'ramp_low': -hdl[c], 'ramp_high': -ldl[c],
                                  'output': -use[c], 'dispatchable': disp[c], 'kind': 'load', 'type': 'CLR',
                                  'status': tel[c], 'max_consumption': num('maxPowerConsumption')[c], 'low_consumption': num('lowPowerConsumption')[c]}))
@@ -397,6 +398,9 @@ def _load_tables(L, rules, controllable=True, load_room='consumption-lpc'):
         pts = [pd.DataFrame({'resource': names[disp], 'mw': -raw(f'SCEDBidCurveMW{k}')[disp], 'price': raw(f'SCEDBidCurvePrice{k}')[disp]})
                for k in range(10, 0, -1) if f'SCEDBidCurveMW{k}' in L]   # last point first: as output (minus consumption) the
         # curve runs the other way, and where two points share a MW the one for more consumption must come first
+        bare = disp & ~has_bid                                           # 6.5.7.3(9): a proxy bid from LPC to MPC at the
+        if bare.any():                                                   # value of lost load
+            pts.append(pd.DataFrame({'resource': np.tile(names[bare], 2), 'mw': np.r_[-most[bare], -least[bare]], 'price': float(rules.voll)}))
         if pts:
             offers = pd.concat(pts, ignore_index=True).dropna()
     keep = n | (ctrl if controllable else False)
@@ -489,7 +493,8 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
            shift_factors=None, resource_nodes=None, rules=None, controllable_loads=True, demand=None,
            reserve_requirements=None, limit_values=None, storage_types=STORAGE_TYPES, zero_price_is_blank=None,
            load_room='consumption-lpc', missing_shift_factors='drop', curve_points=NPT, curve='SCED2', mitigated=None,
-           mitigated_offer_caps=None, categories=None, reference_offers=None, battery_efficiency=None, quick_start=None):
+           mitigated_offer_caps=None, categories=None, reference_offers=None, battery_efficiency=None, quick_start=None,
+           qualified_mw=None):
     """One SCED run's Inputs from ERCOT's published tables (pandas DataFrames, ERCOT's column names).
 
     sced             60-Day SCED Disclosure rows, generation and storage together. One run, or a whole day with `when`
@@ -517,6 +522,10 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
                      'SCED1': the curves before mitigation; the clearing runs both steps and mitigates them itself
     mitigated        names of the resources whose offers are capped in step 2 (only used with curve='SCED1')
     mitigated_offer_caps   table resource, mw, price: their cost-based caps (see opensced.schema())
+    qualified_mw     table resource, product, mw: the most of a reserve product a resource is qualified to carry. Awards
+                     follow "a Resource's qualifications and telemetered Ancillary Service capabilities" (6.5.7.3(12));
+                     the qualified amounts are registration data ERCOT does not publish. helpers.qualified_mw() reads
+                     them off ERCOT's awards. Default: no cap beyond the telemetered capability
     quick_start      names of quick-start units. One that telemeters OFF is still offered ERCOT's proxy Non-Spin offer.
                      Day uses every unit seen in OFFQS during the day
     battery_efficiency   {resource: share of charging energy stored}, e.g. helpers.battery_efficiency(sced). ERCOT does not
@@ -565,6 +574,10 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
         res = pd.concat([res, lres], ignore_index=True)
         eo = pd.concat([eo, mine(leo)], ignore_index=True)
         lim, own = pd.concat([lim, mine(llim)], ignore_index=True), mine(own)
+    if qualified_mw is not None and len(qualified_mw) and len(lim):
+        q = qualified_mw.assign(resource=qualified_mw['resource'].astype(str).str.strip()).set_index(['resource', 'product'])['mw']
+        cap = q[~q.index.duplicated()].reindex(pd.MultiIndex.from_frame(lim[['resource', 'product']])).to_numpy(float)
+        lim = lim.assign(mw=np.where(np.isfinite(cap), np.minimum(lim['mw'].to_numpy(float), cap), lim['mw'].to_numpy(float)))
     ro = None
     if reserve_offers is not None:
         habits = reference_offers
@@ -634,7 +647,11 @@ class Day:
         self.sced = pd.concat(parts, ignore_index=True)
         self.tables = t
         self.times = sorted(self.sced[TS].dropna().unique())
-        self.missing = [FILES[k] for k in ('esr', 'reserve_offers', 'load_resources', 'reserve_demand', 'constraints') if t[k] is None]
+        self.missing = [FILES[k] for k in ('esr', 'reserve_offers', 'load_resources', 'reserve_demand', 'reserve_plan', 'constraints') if t[k] is None]
+        if t['reserve_plan'] is None and t['reserve_demand'] is not None:
+            warnings.warn(f'{folder}: no {FILES["reserve_plan"]} file (DAM Ancillary Service Plan, NP4-33-CD). Limits written against a '
+                          f'reserve requirement then use the demand curve\'s total MW; for Non-Spin that is far above the requirement, '
+                          f'so the limit on Non-Spin from non-controllable loads cannot bind', stacklevel=2)
         self._by_run = dict(tuple(self.sced.groupby(TS)))
         self._curves = None                                              # demand curves, cut by hour once (the full report is large)
         rd = t['reserve_demand']

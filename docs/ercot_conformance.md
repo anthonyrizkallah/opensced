@@ -4,8 +4,8 @@
 
 Every row of the rule-by-rule table below that was marked MISSING or DIFFERS was checked again against the current code
 and, where a rule can be seen in ERCOT's files, measured on the 22 test days (6,335 SCED runs). The rows now describe
-the code as it is. Counts in section 1: 3 rows MISSING or PARTIAL in the clearing (14, 46, 61), 2 DIFFERS (10, 26),
-1 with an exception (34), 1 whose form differs (70). The first table here is the history of what was closed since the first audit and how.
+the code as it is. Counts in section 1: 2 rows MISSING in the clearing (14, 61), 2 DIFFERS (10, 46),
+1 with an exception (34). The first table here is the history of what was closed since the first audit and how.
 
 | Rule | Source | Now | How |
 |---|---|---|---|
@@ -29,6 +29,8 @@ the code as it is. Counts in section 1: 3 rows MISSING or PARTIAL in the clearin
 | Regulation scaling of 5/7 | 6.5.7.3(12) | MATCHES | Was labelled reconstructed; it is written |
 | Prices capped at the value of lost load | 6.5.7.3(14)(d) | MATCHES | Lambda and reserve prices capped at $5,000 after the solve; node prices above it pulled down |
 | Shift factor cutoff 0.0001 | Attachment P 3.3 | MATCHES | Rulebook entry |
+| Self-provided reserves are awarded, not just counted | 6.4.9.1.1(3) | MATCHES | An award now equals the offer MW used for it. August 26, 2026 22:00: lambda error -$2.76 to -$0.55 |
+| Controllable load with no bid | 6.5.7.3(9) | MATCHES | Proxy bid over its consumption range at the value of lost load |
 | Updated demand curves | 6.4.9.1.2(1) | MATCHES | The latest posting made before the run is used |
 | Two-step clearing and offer mitigation | 6.5.7.3(14); 4.4.9.4.1; 4.4.9.4.2 | MATCHES for the mechanics | Step 1 on competitive constraints, floors and caps cut exactly where the curve crosses them. Floors reproduce ERCOT's step-2 curves on 99.2% of raised segments over all 288 runs. Which resources are capped, and their cost-based caps, are inputs |
 
@@ -39,15 +41,13 @@ Still open:
 | Demand target (GTBD) | 6.5.7.3(3) | Not published. The sum of base points is used |
 | Shift factors | 6.5.7.1.13(3)(c) | Posted hourly to the secure area only. NPRR1239 and NPRR1249 move them to the public website on implementation |
 | A non-controllable load may not hold Non-Spin with RRS or ECRS | 4.4.7.2.1(6) | A yes/no choice per load, which a linear program cannot make. It could not bind on any of the 22 test days |
-| A controllable load and ERCOT's proxy offer for Non-Spin | not found | On March 23, 2026 19:15 and April 27, 2026 20:55 the replica awards a controllable load Non-Spin through the proxy block and ERCOT did not. The rule is not identified |
+| Qualified MW per resource and product | 6.5.7.3(12) | Registration data, not published. A controllable load's awards stop at a fixed MW per product for months and step up as the load grows (OB_ALD1 Non-Spin: 4.4, then 12.2, then 27.7 MW in 2026). `inputs(qualified_mw=...)` takes it; `helpers.qualified_mw()` reads a lower bound off ERCOT's awards. Off by default |
 | Status `NA` | data | 18,814 unit-runs in 22 days, held with no reserves; ERCOT awarded reserves on 83 of them |
-| ECRS for a quick-start unit in startup | 6.4.9.1.1(5) | Only Non-Spin is allowed for |
+| Non-Spin on a unit in startup | 6.4.9.1.1(4)-(5) | ERCOT awards it on about a third of the unit-runs where the replica's rule would (42 of 129 in 22 days). Rule not identified. August 26, 2026 23:30 misses by $1.31 for this |
 | Value of lost load switch | 4.4.11 | Emergency Pricing Program and Peaker Net Margin. Replace the rulebook's numbers for the period |
-| Controllable load with no bid | 6.5.7.3(9) | Held at its base point instead of bid at the value of lost load. No effect seen |
 | Reliability deployment price adder: ERS restoration and DC Tie adjustment | 6.5.7.3.1 | `pricing_run()` covers RUC/RMR relaxation and deployed loads; these two terms are not published per run |
 | RUC-committed units priced under $250 | 6.5.7.3(4)(d), (5)(e) | Read from ERCOT's curves and offers, which is what SCED used. ERCOT's own files hold prices under $250 on some committed units; the text alone does not say which |
 | The Most Severe Single Contingency | AS methodology | Not printed. 1,430.2 MW is measured |
-| Form of the minimum for primary frequency response | 3.16(2)(c) | Written as a cap on the other two kinds of RRS (the requirement less 1,377 MW), not as a floor. The two differ only when less RRS clears than the requirement |
 | Monthly minimum for primary frequency response above the floor | 3.16(4) | Needs ERCOT's monthly posting as an input |
 | Battery duration requirements | Section 8 (not pulled) | Values are measured from data, not cited |
 | The competitiveness test that decides which resources are capped | 3.19.4 | Not run. The set of capped resources is an input |
@@ -125,7 +125,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 23 | Proxy for a partial ESR curve | S6 6.5.7.3(6)(a) L1198-1236 | Above the top point: RTSWCAP for MW ≥ 0 (the top point's price for the part below zero). Below the bottom point: −$250.00 for MW ≤ 0 (the bottom point's price for the part above zero). | Not built: the disclosed SCED2 curve is used (see row 18). | MATCHES, through ERCOT's data |
 | 24 | ESR with no curve, or on an Output Schedule | S6 6.5.7.3(6)(b) L1237, (c) L1238; S4 4.4.9.7(7) L965 | No curve: "-$250/MWh for the MW portion ... less than zero MW" and RTSWCAP above zero. Output Schedule: −$250 from LSL to the schedule, RTSWCAP from the schedule to HSL. | Not built: every battery in the disclosure carries a SCED2 curve, `ONOS` included (see rows 17 and 18). | MATCHES, through ERCOT's data |
 | 25 | CLR bid: partial coverage | S6 6.5.7.3(8) L1240-1248 (current); L1250-1258 grey box NPRR1188 renames the bid | LPC up to (MPC − maximum bid MW) at the "Price associated with the lowest MW" in the bid; MPC at the lowest price on the curve. Bids monotonically non-increasing (L1265). | Bid curve mirrored to negative output and held flat beyond its ends. | MATCHES (inferred from the flat extension) |
-| 26 | CLR with no bid | S6 6.5.7.3(9) L1259-1263 | Proxy bid "LPC to MPC" at "Effective Value of Lost Load (VOLL)". | A CLR with no bid curve is held at its Base Point. Measured on two days: one CLR had no bid, and its dispatch range was zero, so nothing changed. It would differ only with lambda at the value of lost load. | DIFFERS (no effect seen) |
+| 26 | CLR with no bid | S6 6.5.7.3(9) L1259-1263 | Proxy bid "LPC to MPC" at "Effective Value of Lost Load (VOLL)". | A CLR that is on line with no bid curve gets the proxy bid: its consumption range at the value of lost load. | MATCHES |
 | 27 | CLR status OUTL | S6 6.5.7.3(10) L1268 (current); L1270 grey box NPRR1188 adds ONHOLD | OUTL: "not considered as dispatchable capacity by SCED". | Dispatchable only when `telResStatus == ONL`. | MATCHES |
 | 28 | PCLR bid capping | S6 6.5.7.3(1) grey box L1003-1005; (14)(b)(iv) grey box L1297 | Dynamic capping of Provisional CLR bid curves. Grey box (NPRR1188/1325): not yet in effect. | Not modelled. | NOT APPLICABLE |
 
@@ -155,7 +155,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 43 | Energy plus awards against HSL | S6 6.5.7.3(14)(c) grey box NPRR1309 L1280 only | Grey box: HSL ≥ "the sum of the Resource-specific awards ... for energy, RRS, ECRS, Reg-Up, Reg-Down, Non-Spin, and DRRS" (Reg-Down is in the sum as written). The current text has no energy-inclusive row. | p + RegUp + RRS + ECRS + NonSpin ≤ the higher of HSL and HDL; p − RegDown ≥ the lower of LSL and LDL (reconstructed from data). | NOT CHECKABLE FROM TEXT |
 | 44 | Off-Line units | S3 3.18(2) L5346; S6 6.5.7.3(14)(d) grey box L1281 | "the amount of Non-Spin awarded must be less than or equal to the HSL for Off-Line Generation Resources". Grey box: ECRS + Non-Spin + DRRS ≤ HSL. | A held unit's up awards ≤ max(HSL − output, 0). | MATCHES |
 | 45 | Product eligibility by status | S3 3.9.1(5)(b) L3385-3396 | SHUTDOWN and STARTUP: "not eligible for an Ancillary Service award". OFFQS: ECRS and Non-Spin. ONSC: RRS and ECRS. OFF: Non-Spin. ONHOLD: none. | Per-status product lists in the rulebook. OFF: Non-Spin only, from what it submitted. OFFQS: ECRS and Non-Spin. ONSC: RRS and ECRS. ONHOLD, ONTEST, SHUTDOWN: none. Measured on 22 days: no award on any of 223,835 ONTEST, ONHOLD or SHUTDOWN unit-runs. | MATCHES |
-| 46 | Startup exception | S6 6.4.9.1.1(4)-(5) L563-564 | An Off-Line unit starting after a manual Non-Spin deployment stays eligible for Non-Spin; a QSGR in startup stays eligible for ECRS and Non-Spin. Eligible capacity = "telemetered HSL of the Resource minus its Base Point". | A unit in STARTUP is held at its Base Point and may carry Non-Spin from its off-line offer row (measured: awarded on 48 of 13,103 unit-runs in 22 days). ECRS for a quick-start unit in startup is not allowed for. | PARTIAL |
+| 46 | Startup exception | S6 6.4.9.1.1(4)-(5) L563-564 | An Off-Line unit starting after a manual Non-Spin deployment stays eligible for Non-Spin; a QSGR in startup stays eligible for ECRS and Non-Spin. Eligible capacity = "telemetered HSL of the Resource minus its Base Point". | A unit in STARTUP is held at its Base Point and may carry Non-Spin from its off-line offer row. Measured on 22 days (13,103 unit-runs): ECRS is never awarded. Non-Spin is awarded on 42 of the 129 unit-runs where that offer is under the clearing price with room and capability, nearly always exactly HSL less Base Point. Reading the on-line offer rows instead fits no better (38 of 119). The rule ERCOT applies is not identified. | DIFFERS (rule not identified) |
 | 47 | RRS-PFR limit per resource | S3 3.18(3)(a) L5350 | Set by verified droop under Nodal Operating Guide Section 8, Attachment N; default "20% of its Maximum Droop Response Range (MDRR)". | Uses disclosed `ASCapRRSPFR`. | NOT CHECKABLE FROM TEXT |
 | 48 | RRS-FFR limit per resource | S3 3.18(3)(d) L5353; S2 L480 | "less than or equal to its 15-minute rated capacity"; FFR must sustain "for at least 15 minutes". | Disclosed `ASCapRRSFFR`; battery duration for RRS = 0.25 h. | MATCHES |
 | 49 | Synchronous condenser limits | S3 3.18(3)(b) L5351, (4)(c) L5357 | RRS or ECRS "up to the Generation Resource's proven 20-second response capability". | Disclosed capability. | NOT CHECKABLE FROM TEXT |
@@ -174,7 +174,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 57 | Proxy AS offer price floor | S6 6.5.7.3(5)(c) L1171-1186; (d) L1191 | Per product: "the lesser of" $2,000 per MW per hour or the ASDC price at "95% of the Ancillary Service Plan", "minus $0.01". Floors may differ for On-Line/Off-Line and by sub-type. | Not computed: it arrives as the price of the proxy block (row 56). | MATCHES, through ERCOT's data |
 | 58 | RUC-committed AS offers | S6 6.5.7.3(5)(e) L1192-1196 | No offer: "$250 per MWh for the full operating range of the Resource up to its telemetered HSL". With an offer: max of own highest price or $250. | Not computed: `ONRUC` units use the disclosed offers and proxy block. Measured on seven days (2,901 unit-runs): the proxy block is priced at $250 or more on all but 70, which are on March 23 and August 12, 2026 and carry lower prices in ERCOT's own file. | MATCHES, through ERCOT's data |
 | 59 | Latest offers used | S6 6.4.9.1(2) L558 | "SCED shall use the latest updated Ancillary Service Offers available to it". | Reads the per-run offer disclosure. | MATCHES (via data) |
-| 60 | Self-provision by relay-controlled loads | S6 6.4.9.1.1(3) L562; telemetry L695 | Load Resources on high-set under-frequency relays "may self-provide" RRS and ECRS, limited by the QSE's DAM awards and trades. How SCED clears that MW is not stated. | Self-arranged MW (RRS-UFR, RRS-FFR, ECRS) entered as $0 offer blocks. | NOT CHECKABLE FROM TEXT |
+| 60 | Self-provision by relay-controlled loads | S6 6.4.9.1.1(3) L562; telemetry L695 | Load Resources on high-set under-frequency relays "may self-provide" RRS and ECRS, limited by the QSE's DAM awards and trades. How SCED clears that MW is not stated. | Self-provided MW (RRS-UFR, RRS-FFR, ECRS) are offer blocks priced far below zero, and an award is exactly the offer MW used for it, so they are taken first. Until November 19, 2026 the row read "award at most the offer MW used", which let the solver count a self-provided block as used without awarding it: on August 26, 2026 22:00, 36 loads were awarded 145 MW less RRS than they self-provided. | NOT CHECKABLE FROM TEXT |
 | 61 | Non-controllable load: Non-Spin not with RRS or ECRS | S4 4.4.7.2.1(6) L462 | Such a load "will not be awarded Non-Spin and RRS or Non-Spin and ECRS on the same Load Resource simultaneously in Real-Time". | No exclusion: it is a yes/no choice per load, which a linear program cannot make. Measured on 22 days: ERCOT never broke it (0 of 7,320 load-runs with Non-Spin), no load offered Non-Spin while holding RRS or ECRS, and the replica gave no load both on nine runs checked. It cannot bind on these days. | MISSING (never binding on the 22 test days) |
 
 ### G. Demand curves and system-wide reserve rules
@@ -189,7 +189,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 67 | Curve between points | S4 4.4.12(8) L1462 | "Each ASDC will be represented by a linear approximation to the corresponding part of the AORDC." | Each segment between two published points is priced at their mean (`segments`). | MATCHES (inferred) |
 | 68 | Curves re-posted during the day | S6 6.4.9.1.2(1) L569 | If the AS Plan changes, ERCOT will "update and post ASDCs for each impacted Ancillary Service product". | For each product, the latest posting made before the run that holds it. | MATCHES |
 | 69 | Reserve price | S6 6.5.7.3(14)(b) L1290; 6.4.9.1.1(8) L567 | Step 2 produces "Real-Time MCPCs". The equation is not written. | MCPC = dual of the product's demand row. | MATCHES (inferred) |
-| 70 | Minimum RRS from Primary Frequency Response | ASM L26; S3 3.16(2)(c) L5278; 3.16(4) L5282 | ASM: "shall not be less than 1,377 MWs". Protocols: "shall not be less than 1,150 MW"; posted monthly. | 1,377 MW from January 1, 2026 (1,365 MW before, measured). Written as a ceiling on FFR + UFR of (demand curve total MW − 1,377), not as a floor on PFR. The two differ when less RRS clears than the curve's full width. | DIFFERS (number matches; form differs) |
+| 70 | Minimum RRS from Primary Frequency Response | ASM L26; S3 3.16(2)(c) L5278; 3.16(4) L5282 | ASM: "shall not be less than 1,377 MWs". Protocols: "shall not be less than 1,150 MW"; posted monthly. | 1,377 MW from January 1, 2026 (1,365 MW before, measured). Written as a cap on FFR + UFR of (requirement − 1,377), not as a floor on PFR. Measured: ERCOT does the same. On August 26, 2026 PFR clears under 1,377 MW in 11 runs (down to 1,316) while FFR + UFR stay at the requirement less 1,377, so it is not a hard floor. (Published load awards are cut to one decimal: their sum reads about 5 MW low.) | MATCHES (measured) |
 | 71 | Maximum RRS from FFR | ASM L26; S3 3.16(2)(b) L5275 | "limited to 450 MW". | Rulebook limit `FFR`, 450 MW. | MATCHES |
 | 72 | Relay loads plus FFR share of RRS | S3 3.16(4) L5282 (current); L5284 grey box NPRR1128 keeps the 60%; ASM L26 | "shall be limited to 60% of the total ERCOT RRS requirement". The ASM words it as "DAM will limit". | Rulebook limit `relay loads + FFR`, 60% of the RRS requirement. The requirement is the AS Plan when the `dam_as_plan` file is given, else the demand curve's total MW (the same number for RRS on the days compared). | MATCHES |
 | 73 | Non-controllable loads' share of ECRS | S3 3.16(7) L5287 | "limited to 50% of the total ERCOT ECRS requirement". | Rulebook limit `ECRS from loads`, 50% of the ECRS requirement, non-controllable loads only. Requirement as in row 72. | MATCHES |
@@ -233,15 +233,18 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 
 ## 2. Gaps most likely to change prices
 
-As of November 19, 2026. With ERCOT's own congestion (no shift factors), 24 of 6,424 runs on the 22 test days miss
+As of November 20, 2026. With ERCOT's own congestion (no shift factors), 25 of 6,424 runs on the 22 test days miss
 ERCOT's lambda by $1 or more.
 
 1. **Shift factors.** Not public; fitted. The largest error in a normal replay, and not part of the clearing math.
-2. **Reserve offers before February 3, 2026.** 20 of the 24 misses are on January 25 and 28, 2026.
-3. **Controllable loads and the proxy Non-Spin offer.** 2 of the 24 misses. Rule not identified.
-4. **August 26, 2026, 22:00 and 23:30.** 2 of the 24 misses ($2.76 and $1.34). Cause not found.
-5. **Demand target.** Matters only in runs where ERCOT itself was short or long.
-6. **Status `NA`, startup ECRS, the Non-Spin exclusion on loads, the value of lost load switch.** No miss traced to any.
+2. **Reserve offers before February 3, 2026.** 21 of the 25 misses are on January 25 and 28, 2026.
+3. **Qualified MW of controllable loads.** Not published. With it read off ERCOT's awards, March 23, 2026 19:15 goes
+   from -$1.41 to -$0.36 and April 27, 2026 20:55 from -$2.38 to -$0.80.
+4. **Non-Spin on units in startup.** August 26, 2026 23:30 (-$1.31). Rule not identified.
+5. **How a battery short on stored energy splits RRS and ECRS.** August 26, 2026 22:30 (+$1.13); capping battery
+   awards at ERCOT's own leaves +$0.15. Rule not identified.
+6. **Demand target.** Matters only in runs where ERCOT itself was short or long.
+7. **Status `NA`, startup ECRS, the Non-Spin exclusion on loads, the value of lost load switch.** No miss traced to any.
 
 ---
 

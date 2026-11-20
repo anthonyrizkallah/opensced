@@ -121,6 +121,9 @@ curves gives a system lambda error of $0.16 and a node price error of $0.26, aga
 - **Demand** is what SCED dispatched, not ERCOT's own demand target, which is not published.
 - **Controllable loads have no node.** Unless your `resource_nodes` names them, they do not affect any constraint.
   `ercot.inputs(..., controllable_loads=False)` treats them as fixed demand instead.
+  A controllable load is awarded each reserve product only up to the MW it is qualified for. ERCOT does not publish
+  that number. `helpers.qualified_mw(load_resource_rows)` reads a lower bound off ERCOT's own awards (give it many
+  days); pass the result as `ercot.inputs(..., qualified_mw=...)`. Off by default.
 - **The constraint list is ERCOT's.** The engine is told which constraints were active. It does not find them from a
   full network model.
 - **Before February 3, 2026** ERCOT wrote unpriced reserve offer cells as 0, so a real $0 offer and a blank look the

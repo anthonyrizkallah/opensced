@@ -205,3 +205,35 @@ def battery_efficiency(sced, rules=None, storage_types=('ESR',), min_runs=5, tol
     at = d[(d.ratio - low) < tolerance].groupby('resource').ratio.agg(['size', 'min'])
     at = at[(at['size'] >= min_runs) & (at['min'] > 0.5) & (at['min'] <= 1.0 + tolerance)]
     return at['min'].clip(upper=1.0).round(4).rename('efficiency')
+
+
+def qualified_mw(load_resources, rules=None, min_runs=3, tolerance=0.06):
+    """The most of each reserve product a controllable Load Resource is qualified to carry, read off ERCOT's own
+    awards. -> table resource, product, mw, for adapter.inputs(qualified_mw=...).
+
+    The qualified amount is registration data ERCOT does not publish. It shows in the awards: with the clearing price
+    above the load's own offer and above ERCOT's proxy offer, and room left to drop, the award stops at the same MW
+    run after run, month after month, and steps up when the load grows (OB_ALD1 in 2026: Non-Spin 4.4 MW until April
+    11, 12.2 MW from April 24, 27.7 MW by August 23). A load and product get the largest award in the rows given, if at
+    least `min_runs` runs sit on it; others are left out and stay limited by telemetered capability alone.
+
+    This is a lower bound: the largest award seen, which is the qualified amount only when the award was held by it.
+    Give it many days, not one. `load_resources` is 60-Day SCED Load Resource rows, one day or many."""
+    from opensced.markets.ercot import rulebooks
+    rules = rules or rulebooks.ALL.latest
+    L = load_resources.copy()
+    L.columns = L.columns.str.strip()
+    bid = pd.to_numeric(L['SCEDBidCurveMW1'], errors='coerce').notna() if 'SCEDBidCurveMW1' in L else pd.Series(False, index=L.index)
+    L = L[bid.to_numpy()]                                               # controllable: it has a bid curve
+    name = L['resourceName'].astype(str).str.strip()
+    out = []
+    for p in rules.products:
+        cols = [c.replace('ASCap', 'ASAwards') for c in p.capability_columns if c.replace('ASCap', 'ASAwards') in L]
+        if not cols or not len(L):
+            continue
+        a = sum(pd.to_numeric(L[c], errors='coerce').fillna(0.0) for c in cols)
+        top = a.groupby(name).transform('max')
+        at = ((a > top - tolerance) & (top > tolerance)).groupby(name).sum()
+        g = a.groupby(name).max()[at >= min_runs]
+        out.append(pd.DataFrame({'resource': g.index, 'product': p.name, 'mw': g.to_numpy(float)}))
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=['resource', 'product', 'mw'])

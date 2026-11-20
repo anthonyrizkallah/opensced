@@ -331,3 +331,31 @@ def test_opted_out_units_are_read_off_the_relaxed_capacity():
     assert pricing.opted_out_from_relaxed(c, 65.0) == []                 # both relaxed
     assert pricing.opted_out_from_relaxed(c, 40.0) == ['ruc2'] and pricing.opted_out_from_relaxed(c, 25.0) == ['ruc']
     assert pricing.opted_out_from_relaxed(c, 0.0) == ['ruc', 'ruc2'] and pricing.opted_out_from_relaxed(c, 50.0) is None
+
+
+def test_qualified_mw_caps_a_reserve_limit(day):
+    t = day.times[0]
+    i = day.inputs(t)
+    lim = i.reserve_limits[i.reserve_limits['product'] == 'NonSpin'].sort_values('mw').iloc[-1]
+    q = pd.DataFrame([{'resource': lim.resource, 'product': 'NonSpin', 'mw': 1.5}])
+    capped = day.inputs(t, qualified_mw=q).reserve_limits.set_index(['resource', 'product']).mw
+    assert capped[(lim.resource, 'NonSpin')] == pytest.approx(1.5) and lim.mw > 1.5
+    assert capped.drop((lim.resource, 'NonSpin')).sum() == pytest.approx(i.reserve_limits.mw.sum() - lim.mw)   # nothing else moved
+    from opensced.markets.ercot import helpers
+    seen = helpers.qualified_mw(pd.concat([day.tables['load_resources']] * 3), min_runs=3)   # the same run three times
+    L = day.tables['load_resources']
+    has_bid = pd.to_numeric(L['SCEDBidCurveMW1'], errors='coerce').notna()
+    assert set(seen['resource']) <= set(L.loc[has_bid, 'resourceName'].astype(str).str.strip()) and (seen['mw'] > 0).all()
+
+
+def test_a_controllable_load_with_no_bid_gets_the_proxy_bid(day):
+    t = day.times[0]
+    L = day.tables['load_resources'].copy()
+    ctrl = pd.to_numeric(L['SCEDBidCurveMW1'], errors='coerce').notna() & (L['telResStatus'].astype(str).str.strip() == 'ONL')
+    name = L.loc[ctrl, 'resourceName'].astype(str).str.strip().iloc[0]
+    row = L['resourceName'].astype(str).str.strip() == name
+    L.loc[row, [c for c in L.columns if c.startswith('SCEDBidCurve')]] = np.nan
+    i = ercot.adapter.inputs(day.sced, t, load_resources=L)
+    bid = i.energy_offers[i.energy_offers.resource == name]
+    r = i.resources.set_index('name').loc[name]
+    assert (bid.price == 5000.0).all() and bid.mw.min() == pytest.approx(r.low) and bid.mw.max() == pytest.approx(r.high)

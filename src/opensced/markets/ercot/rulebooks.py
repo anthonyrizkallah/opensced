@@ -117,9 +117,12 @@ RTC_B = Rules(
         'self_arranged_price': 'measured on four days (190,980 load-runs with self-provided reserves): the ECRS award equals the self-provided '
                                'ECRS, or the room left after RRS, on 97%; where room is short RRS is filled first on 95%. A load is '
                                'never awarded anything while not ONL (341,380 load-runs). The price is only a device to make the clearing '
-                               'take self-provided MW first; it is never the marginal offer',
-        'statuses_startup': 'measured on three days (21 unit-runs, 422 MW-runs): a unit in STARTUP is awarded Non-Spin within its OFFNS row on '
-                            'every one, and above its ONRES row on half. On March 23, 2026 at 21:30 three such units held 110 MW',
+                               'take self-provided MW first; it is never the marginal offer. An award equals the offer MW used for it, so a block '
+                               'priced this low is always awarded',
+        'statuses_startup': 'measured on 22 days (13,103 unit-runs): a unit in STARTUP is never awarded ECRS. It is awarded Non-Spin on 42 '
+                            'of the 129 unit-runs where its off-line offer is under the clearing price with room and capability, nearly '
+                            'always exactly HSL less base point. Reading its on-line offer rows instead fits no better (38 of 119). The '
+                            'rule ERCOT applies is not identified; the off-line row is kept',
         'statuses_offqs': 'measured on two days (3,093 unit-runs): an off-line quick-start unit is awarded ECRS and Non-Spin from its '
                           'ONRES row only. Its OFFNS row repeats the same MW and is not added',
         'shadow_price_caps': 'protocols Section 22 Attachment P: base case 5,251; contingency by voltage 4,500 / 3,500 / 2,800',

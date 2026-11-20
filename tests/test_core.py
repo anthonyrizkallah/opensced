@@ -374,3 +374,17 @@ def test_dispatch_limits_ramp_lets_the_ramp_range_reach_past_the_sustained_limit
     c.resources['ramp_high'] = [16.03, 100.0]
     assert clear(c).dispatch['wind'] == pytest.approx(16.0)
     assert clear(c, Rules(dispatch_limits='ramp')).dispatch['wind'] == pytest.approx(16.03)
+
+
+def test_a_reserve_offer_priced_below_zero_is_awarded_not_just_counted():
+    # 'held' can carry either product on one 10 MW of room. Slow is worth more to the system, but the block it offers
+    # for Fast is priced far below zero (self-provided reserves): Fast must be what it is awarded
+    rules = Rules(products=(Product('Slow', 'up'), Product('Fast', 'up')), reserve_offer_floor=-1e9)
+    c = case({'gen': (0, 200, 20.0), 'held': (0, 10, 0.0)}, 50)
+    c.resources['dispatchable'] = [True, False]
+    c.reserve_limits = pd.DataFrame([{'resource': 'held', 'product': p, 'mw': 10.0} for p in ('Slow', 'Fast')])
+    c.reserve_offers = pd.DataFrame([{'resource': 'held', 'block': 'own', 'mw': 10.0, 'product': 'Slow', 'price': 0.0},
+                                     {'resource': 'held', 'block': 'self', 'mw': 10.0, 'product': 'Fast', 'price': -10000.0}])
+    c.reserve_demand = pd.DataFrame({'product': ['Slow', 'Slow', 'Fast', 'Fast'], 'mw': [0.0, 10.0, 0.0, 10.0], 'price': [300.0, 300.0, 100.0, 100.0]})
+    a = clear(c, rules).reserve_awards.loc['held']
+    assert a['Fast'] == pytest.approx(10.0) and a['Slow'] == pytest.approx(0.0)
