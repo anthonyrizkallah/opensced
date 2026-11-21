@@ -33,7 +33,7 @@ def dispatch_limits(resources, rules):
     status = r['status'].astype(str).str.upper().to_numpy() if 'status' in r else np.full(len(r), '')
     hi, lo = np.minimum(out + up * m, high), np.maximum(out - dn * m, low)
     hi = np.where(status == 'SHUTDOWN', out - dn * m, hi)
-    lo = np.where(status == 'STARTUP', out + up * m, lo)
+    lo = np.where(np.isin(status, ('STARTUP', 'STARTUP-NS')), out + up * m, lo)
     hold = np.clip(out, low, high)
     test, held = status == 'ONTEST', status == 'ONHOLD'
     hi, lo = np.where(test, hold, hi), np.where(test, hold, lo)
@@ -237,3 +237,41 @@ def qualified_mw(load_resources, rules=None, min_runs=3, tolerance=0.06):
         g = a.groupby(name).max()[at >= min_runs]
         out.append(pd.DataFrame({'resource': g.index, 'product': p.name, 'mw': g.to_numpy(float)}))
     return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=['resource', 'product', 'mw'])
+
+
+def offline_proxy_units(sced, reserve_offers, min_runs=1):
+    """Units ERCOT awards Non-Spin through its proxy offer while they are OFF. -> sorted names, for
+    adapter.inputs(offline_proxy=...).
+
+    An off-line unit is normally awarded only the Non-Spin its QSE offered on an off-line (OFFNS) offer; a quick-start
+    unit also gets ERCOT's proxy offer for the rest. A few other units get it too. Measured on 22 days: nine units were
+    awarded Non-Spin while OFF with no off-line offer of their own, on 104 of the 122 unit-runs where the proxy price was
+    under the clearing price; 78 other units in the same position were never awarded on 4,136 unit-runs. Which units
+    is not published, so they are read off the awards: a unit is named when, in at least `min_runs` runs, it is OFF,
+    awarded Non-Spin, and its off-line offer row has no Non-Spin price in the blocks a QSE submits (1 to 5).
+    `sced` is 60-Day SCED generation rows and `reserve_offers` the 60-Day reserve offers of the same runs."""
+    from opensced.markets.ercot import adapter
+    s = adapter.normalize(sced)
+    st = s['Telemetered Resource Status'].astype(str).str.strip().str.upper()
+    won = pd.to_numeric(s['ASAwardsNSPIN'], errors='coerce').fillna(0.0) > 0.05 if 'ASAwardsNSPIN' in s else pd.Series(False, index=s.index)
+    a = s.loc[(st == 'OFF') & won, [adapter.TS, adapter.RES]].copy()
+    if not len(a):
+        return []
+    a.columns = ['t', 'n']
+    a['t'], a['n'] = pd.to_datetime(a['t']).dt.floor('5min'), a['n'].astype(str).str.strip()
+    o = adapter.offer_columns(reserve_offers)
+    o = o[o['resourceName'].astype(str).str.strip().isin(set(a['n']))].copy()
+    if 'offerType' in o and o['offerType'].notna().any():
+        o = o[o['offerType'].astype(str).str.strip() == 'OFFNS']
+    else:                                                               # files of December 2025 with no offer type
+        o = o.assign(offerType=adapter._offer_types(o.rename(columns={'resourceName': 'resource', 'offerType': 'offer_type'})).to_numpy())
+        o = o[o['offerType'] == 'OFFNS']
+    own = np.zeros(len(o), bool)
+    for k in range(1, 6):
+        if f'price{k}NSPIN' in o and f'quantityMW{k}' in o:
+            own |= (pd.to_numeric(o[f'price{k}NSPIN'], errors='coerce').notna() & (pd.to_numeric(o[f'quantityMW{k}'], errors='coerce') > 0)).to_numpy()
+    o = pd.DataFrame({'t': pd.to_datetime(o['SCEDTimestamp']).dt.floor('5min').to_numpy(), 'n': o['resourceName'].astype(str).str.strip().to_numpy(), 'own': own})
+    m = a.merge(o.groupby(['t', 'n'], as_index=False)['own'].max(), on=['t', 'n'], how='left')
+    m['own'] = m['own'].fillna(False).astype(bool)                      # no off-line row at all: nothing of its own either
+    n = m[~m['own']].groupby('n').size()
+    return sorted(n[n >= min_runs].index)

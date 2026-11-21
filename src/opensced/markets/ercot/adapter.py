@@ -18,6 +18,7 @@ The reports, by the file name read_day() looks for (the name of the report's API
     lmp_node_zone_hub             LMPs by Resource Node, Load Zone and Hub         NP6-788-CD   for scoring
     sced_system_lambda            SCED System Lambda                               NP6-322-CD   for scoring
     rt_clear_price_cap_sced       Real-Time Clearing Prices for Capacity           NP6-332-CD   for scoring
+    as_deployments                when ERCOT had Non-Spin deployed: product, start, end (from its operations messages)
     2day_agg_sced_as_offers       2-Day Aggregate SCED Ancillary Service Offers    NP3-906-EX   days before Feb 3, 2026
     reference_sced_resource_as_offers   the same disclosure for a day on or after Feb 3, 2026 (optional, with the line above)
                                   (the nine product files in one table, with a `product` column)
@@ -44,6 +45,7 @@ How a SCED run becomes the tables
     constraints every constraint ERCOT reported in the run, with its reported flow, limit and maximum shadow price.
 """
 import os
+import re
 import warnings
 
 import numpy as np
@@ -82,7 +84,7 @@ FILES = {'gen': '60_sced_gen_res_data', 'esr': '60d_sced_esr_data', 'reserve_off
          'load_resources': '60_load_res_data_in_sced', 'reserve_demand': 'dam_sced_as_demand_curves', 'reserve_plan': 'dam_as_plan',
          'constraints': 'shdw_prices_bnd_trns_const', 'lmp': 'lmp_node_zone_hub', 'system_lambda': 'sced_system_lambda',
          'reserve_prices': 'rt_clear_price_cap_sced', 'aggregate_offers': '2day_agg_sced_as_offers',
-         'reference_offers': 'reference_sced_resource_as_offers'}
+         'reference_offers': 'reference_sced_resource_as_offers', 'reserve_deployments': 'as_deployments'}
 
 
 # ---------------------------------------------------------------- the SCED disclosure
@@ -178,6 +180,36 @@ def _sced_tables(x, rules, storage_types=STORAGE_TYPES, curve_points=NPT, curve=
     return resources, offers, storage, pd.concat(lim, ignore_index=True), dict(zip(names, status)), dict(zip(names, disp))
 
 
+# product codes in the website's CSV: the short ones (files posted to April 2026) and the API's own (later files)
+_OFFER_PRODUCT = {'URS': 'REGUP', 'DRS': 'REGDN', 'RRSPF': 'RRSPFR', 'RRSUF': 'RRSUFR', 'RRSFF': 'RRSFFR', 'NS': 'NSPIN', 'ECRS': 'ECRS',
+                  'REGUP': 'REGUP', 'REGDN': 'REGDN', 'RRSPFR': 'RRSPFR', 'RRSUFR': 'RRSUFR', 'RRSFFR': 'RRSFFR', 'NSPIN': 'NSPIN'}
+
+
+def offer_columns(o):
+    """The reserve offer disclosure with the API's column names. The website's CSV (the only form ERCOT's corrected
+    files for December 5, 2025 to February 2, 2026 come in) names them PRICE1_URS, QUANTITY_MW1, "SCED Timestamp", ...
+    and writes the repeated-hour flag as Y / N."""
+    if o is None or 'SCEDTimestamp' in o.columns:
+        return o
+    names = {'SCED Timestamp': 'SCEDTimestamp', 'Repeated Hour Flag': 'repeatHourFlag', 'Resource Name': 'resourceName',
+             'Offer Type': 'offerType'}
+    for c in o.columns:
+        m = re.fullmatch(r'PRICE(\d)_([A-Z]+)', str(c).strip())
+        if m and m.group(2) in _OFFER_PRODUCT:
+            names[c] = f'price{m.group(1)}{_OFFER_PRODUCT[m.group(2)]}'
+        elif m:
+            raise ValueError(f'the reserve offer table has a price column for a product code this adapter does not know: {c}')
+        m = re.fullmatch(r'QUANTITY_MW(\d)', str(c).strip())
+        if m:
+            names[c] = f'quantityMW{m.group(1)}'
+    o = o.rename(columns=names)
+    if 'SCEDTimestamp' not in o.columns:
+        raise ValueError(f'the reserve offer table has no SCED timestamp column; its columns are {list(o.columns)[:8]}...')
+    if 'repeatHourFlag' in o and o['repeatHourFlag'].dtype == object:
+        o['repeatHourFlag'] = o['repeatHourFlag'].astype(str).str.strip().str.upper().isin(('Y', 'TRUE'))
+    return o
+
+
 def _offer_types(o):
     """the offer type of each row of the reserve offer disclosure: ONRES, REGDN or OFFNS.
 
@@ -257,9 +289,14 @@ def _reserve_offers(o, status, when, rules, zero_price_is_blank=None, aggregate=
     may_carry = {x.name: x.reserves for x in rules.statuses}
     no_proxy = {x.name for x in rules.statuses if not x.proxy_reserves}
     group = o['resource'].map(status).to_numpy()
-    allowed = np.array([bool(may_carry.get(g)) for g in group])          # the resource's status may carry reserves at all
-    carries = lambda ot, p: np.array([bool(may_carry.get(g)) and ot in may_carry[g] and (may_carry[g][ot] is None or p in may_carry[g][ot]) for g in group])
-    zero_blank = (pd.Timestamp(when) < ZERO_FILL_END) if zero_price_is_blank is None else zero_price_is_blank
+    allowed = np.array([bool(may_carry.get(g)) for g in group], dtype=bool)   # the resource's status may carry reserves at all
+    carries = lambda ot, p: np.array([bool(may_carry.get(g)) and ot in may_carry[g] and (may_carry[g][ot] is None or p in may_carry[g][ot]) for g in group], dtype=bool)
+    if zero_price_is_blank is None:                                  # a file with blank prices is ERCOT's corrected one
+        prices = [c for c in o.columns if c.startswith('price')]
+        blanks = bool(len(o)) and bool(o[prices].isna().to_numpy().any())
+        zero_blank = pd.Timestamp(when) < ZERO_FILL_END and not blanks
+    else:
+        zero_blank = zero_price_is_blank
     kinds = sorted({k for p in rules.products for k in p.offer_kinds})
     name, kind = o['resource'].to_numpy(), o['offer_type'].to_numpy()
     out = []
@@ -494,6 +531,7 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
            reserve_requirements=None, limit_values=None, storage_types=STORAGE_TYPES, zero_price_is_blank=None,
            load_room='consumption-lpc', missing_shift_factors='drop', curve_points=NPT, curve='SCED2', mitigated=None,
            mitigated_offer_caps=None, categories=None, reference_offers=None, battery_efficiency=None, quick_start=None,
+           startup_non_spin=None, status_overrides=None, offline_proxy=None,
            qualified_mw=None):
     """One SCED run's Inputs from ERCOT's published tables (pandas DataFrames, ERCOT's column names).
 
@@ -514,7 +552,8 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
                      points. Controllable loads' consumption is taken off it either way
     reserve_requirements, limit_values   passed through (see opensced.schema())
     storage_types    resource types treated as storage
-    zero_price_is_blank   read a reserve offer price of 0 as "not offered". Default: true before February 3, 2026
+    zero_price_is_blank   read a reserve offer price of 0 as "not offered". Default: true before February 3, 2026, unless
+                     the file has blank prices: then it is ERCOT's corrected file (posted April 10, 2026) and a 0 is a real offer
     load_room        'consumption-lpc' (what a load can drop from where it is now) or 'mpc-lpc' (from its maximum)
     missing_shift_factors   'drop' a constraint with no shift factors (listed in notes) or raise an 'error'
     curve_points     points on an offer curve in the files
@@ -525,9 +564,18 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
     qualified_mw     table resource, product, mw: the most of a reserve product a resource is qualified to carry. Awards
                      follow "a Resource's qualifications and telemetered Ancillary Service capabilities" (6.5.7.3(12));
                      the qualified amounts are registration data ERCOT does not publish. helpers.qualified_mw() reads
-                     them off ERCOT's awards. Default: no cap beyond the telemetered capability
+                     them off ERCOT's awards, and Day uses that on the day's own files. Here the default is no cap
+                     beyond the telemetered capability
     quick_start      names of quick-start units. One that telemeters OFF is still offered ERCOT's proxy Non-Spin offer.
                      Day uses every unit seen in OFFQS during the day
+    offline_proxy    names of units that are awarded Non-Spin through ERCOT's proxy offer while OFF, though they are not
+                     quick-start. Which units is not published (it follows their Non-Spin qualification);
+                     helpers.offline_proxy_units() reads them off ERCOT's awards, and Day uses that on the day's own files
+    status_overrides {resource: status} to use in place of the telemetered status of a generator or battery, e.g. the
+                     status a unit had just before ERCOT's file printed it blank (Day's `blank_status='previous'`)
+    startup_non_spin names of units in STARTUP that keep Non-Spin (6.4.9.1.1(4)-(5)): quick-start units, and units
+                     that carried off-line Non-Spin before starting while ERCOT has Non-Spin deployed. Every other unit
+                     in STARTUP carries no reserve. Day works the names out (see Day.startup_non_spin)
     battery_efficiency   {resource: share of charging energy stored}, e.g. helpers.battery_efficiency(sced). ERCOT does not
                      publish it; a battery not named gets rules.storage_charge_efficiency
     categories       {resource: category} to override the category taken from the resource type, e.g. 'qf'
@@ -550,9 +598,21 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
         if empty and len(empty) < len(caps):
             raise ValueError(f'the SCED table has no values in {", ".join(empty)} at {when}, so no generator or battery could carry '
                              f'that product. Files of December 2025 downloaded early lack these columns; ERCOT\'s API has them')
+    if status_overrides:
+        given = x[RES].astype(str).str.strip().map(status_overrides)
+        if given.notna().any():
+            x = x.copy()
+            x.loc[given.notna(), 'Telemetered Resource Status'] = given[given.notna()]
+    if startup_non_spin is not None and len(startup_non_spin):     # a starting unit that keeps its Non-Spin
+        st = x['Telemetered Resource Status'].astype(str).str.strip().str.upper()
+        ns = x[RES].astype(str).str.strip().isin(set(startup_non_spin)) & (st == 'STARTUP')
+        if ns.any():
+            x = x.copy()
+            x.loc[ns, 'Telemetered Resource Status'] = 'STARTUP-NS'
     res, eo, sto, lim, status, disp = _sced_tables(x, rules, storage_types, curve_points, curve)
-    if quick_start is not None and len(quick_start):               # a quick-start unit that telemeters OFF
-        qs = res['name'].isin(set(quick_start)) & (res['status'] == 'OFF')
+    proxied = set(quick_start if quick_start is not None else ()) | set(offline_proxy if offline_proxy is not None else ())
+    if proxied:                                                      # a quick-start (or so-qualified) unit that telemeters OFF
+        qs = res['name'].isin(proxied) & (res['status'] == 'OFF')
         res.loc[qs, 'status'] = 'OFF-QS'
         status.update({n: 'OFF-QS' for n in res.loc[qs, 'name']})
     if len(sto):
@@ -580,6 +640,7 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
         lim = lim.assign(mw=np.where(np.isfinite(cap), np.minimum(lim['mw'].to_numpy(float), cap), lim['mw'].to_numpy(float)))
     ro = None
     if reserve_offers is not None:
+        reserve_offers = offer_columns(reserve_offers)
         habits = reference_offers
         if habits is not None and 'hour' not in habits:                # a raw day of offers: reduce it to its $0 cells
             habits = zero_offer_habits(habits)
@@ -639,6 +700,7 @@ class Day:
     def __init__(self, folder):
         self.folder = folder
         t = {k: _read(folder, stem) for k, stem in FILES.items()}
+        t['reserve_offers'], t['reference_offers'] = offer_columns(t['reserve_offers']), offer_columns(t['reference_offers'])
         if t['gen'] is None:
             have = ', '.join(sorted(os.listdir(folder))) if os.path.isdir(folder) else 'the folder does not exist'
             raise FileNotFoundError(f'{folder}: no {FILES["gen"]}.parquet or .csv (the 60-Day SCED Disclosure for generation '
@@ -662,13 +724,78 @@ class Day:
         from opensced.markets.ercot import helpers
         self.battery_efficiency = helpers.battery_efficiency(self.sced)      # read off the day's own Reg-Down awards
         self.quick_start = sorted(set(self.sced.loc[self.sced['Telemetered Resource Status'].astype(str).str.strip() == 'OFFQS', RES]))
+        self.offline_proxy = helpers.offline_proxy_units(self.sced, t['reserve_offers']) if t['reserve_offers'] is not None else []
+        self.qualified_mw = helpers.qualified_mw(t['load_resources']) if t['load_resources'] is not None else None
+        self._startup = self._startups(t['reserve_deployments'])
+        self.blank_status = 'previous'                                   # or 'none': see inputs()
+        self._before_blank = self._previous_status()
+        if t['reserve_deployments'] is None and self._startup['carried']:
+            warnings.warn(f'{folder}: no {FILES["reserve_deployments"]} file (when ERCOT had Non-Spin deployed: columns product, '
+                          f'start, end). {len(self._startup["carried"])} unit(s) that carried off-line Non-Spin start up on this day; '
+                          f'without the file they are given no Non-Spin while starting', stacklevel=2)
         self._split = {}                                                 # per-run reports, cut by run once
         for k in ('reserve_offers', 'load_resources', 'constraints', 'aggregate_offers'):
             if t[k] is not None:
                 when = pd.Series(self._snap(t[k]['SCEDTimestamp']), index=t[k].index)
                 self._split[k] = {u: g for u, g in t[k].groupby(when)}
 
-    def inputs(self, time, shift_factors=None, resource_nodes=None, rules=None, **options):
+    def _startups(self, deployments):
+        """What decides which starting units keep Non-Spin: the stretches of STARTUP of every unit that carried an
+        off-line Non-Spin award in the stretch just before it, and the times ERCOT had Non-Spin deployed."""
+        s = self.sced[[TS, RES, 'Telemetered Resource Status']].copy()
+        s.columns = ['t', 'n', 'st']
+        s['st'] = s['st'].astype(str).str.strip()
+        s['ns'] = pd.to_numeric(self.sced['ASAwardsNSPIN'], errors='coerce').fillna(0.0).to_numpy() if 'ASAwardsNSPIN' in self.sced else 0.0
+        names = s.loc[s['st'] == 'STARTUP', 'n'].unique()
+        carried = {}                                                     # unit -> the runs of its startups that follow a Non-Spin award
+        for n, g in s[s['n'].isin(names)].sort_values('t').groupby('n'):
+            g = g[g['st'] != 'NA']                                       # a status ERCOT prints while a unit changes state
+            block = (g['st'] != g['st'].shift()).cumsum()
+            had = g.groupby(block)['ns'].max().shift(1).fillna(0.0) > 0
+            runs = g.loc[(g['st'] == 'STARTUP') & block.map(had).to_numpy(), 't']
+            if len(runs):
+                carried[n] = set(runs)
+        spans = []
+        if deployments is not None and len(deployments):
+            d = deployments.rename(columns=str.lower)
+            if 'product' in d:
+                d = d[d['product'].astype(str).str.replace('-', '').str.lower().isin(('nonspin', 'nspin'))]
+            spans = list(zip(pd.to_datetime(d['start']), pd.to_datetime(d['end'])))
+        return {'carried': carried, 'deployed': spans}
+
+    def _previous_status(self):
+        """For every unit-run whose status ERCOT's file leaves blank (printed NA): the last status the unit had before it.
+        -> {run: {resource: status}}. A unit blank from the first run of the day has none."""
+        s = self.sced[[TS, RES, 'Telemetered Resource Status']].copy()
+        s.columns = ['t', 'n', 'st']
+        st = s['st'].astype(str).str.strip().str.upper()
+        blank = s['st'].isna() | st.isin(('', 'NA', 'NAN', 'NONE'))
+        if not blank.any():
+            return {}
+        s['st'] = st.where(~blank)
+        s = s.sort_values(['n', 't'])
+        s['prev'] = s.groupby('n')['st'].ffill()
+        b = s[s['st'].isna() & s['prev'].notna()]
+        return {t: dict(zip(g['n'], g['prev'])) for t, g in b.groupby('t')}
+
+    def startup_non_spin(self, time):
+        """Units in STARTUP at this run that keep Non-Spin (Protocols 6.4.9.1.1(4)-(5)): the day's quick-start units,
+        and, while ERCOT has Non-Spin deployed, units that carried an off-line Non-Spin award just before starting.
+        Measured on 13 days with deployment times (7,353 unit-runs in STARTUP, 37 awarded): 36 of the 39 unit-runs this
+        awards or ERCOT awarded agree to 0.5 MW; the rule it replaces (every starting unit, off-line offer) got 33 of 122."""
+        t = pd.Timestamp(time)
+        out = set(self.quick_start)
+        if any(a <= t <= b for a, b in self._startup['deployed']):
+            out |= {n for n, runs in self._startup['carried'].items() if t in runs}
+        return sorted(out)
+
+    def inputs(self, time, shift_factors=None, resource_nodes=None, rules=None, blank_status=None, **options):
+        """The run's Inputs. blank_status says what to do with a unit whose status ERCOT's file leaves blank (printed NA,
+        usually for one run while it changes state): 'previous' (the default, `self.blank_status`) gives it the last
+        status it had; 'none' holds it at its base point with no reserves. Measured on 33 days, on the 6,166 runs that
+        have such a unit: 'previous' changes the system price by more than $0.05 in 15 runs, every one closer to
+        ERCOT's (January 28, 2026 07:00: four quick-start hydro units keep their ECRS in the run they come on, error
+        $6.18 -> $0.00), and none further away."""
         t = pd.Timestamp(time)
         if t not in self._by_run:
             near = min(self.times, key=lambda u: abs(u - t))
@@ -678,6 +805,14 @@ class Day:
         options.setdefault('reference_offers', self._habits)
         options.setdefault('battery_efficiency', self.battery_efficiency)
         options.setdefault('quick_start', self.quick_start)
+        options.setdefault('offline_proxy', self.offline_proxy)
+        if self.qualified_mw is not None and len(self.qualified_mw):
+            options.setdefault('qualified_mw', self.qualified_mw)
+        options.setdefault('startup_non_spin', self.startup_non_spin(t))
+        if (blank_status or self.blank_status) == 'previous':
+            options.setdefault('status_overrides', self._before_blank.get(t, {}))
+        elif (blank_status or self.blank_status) != 'none':
+            raise ValueError(f"blank_status is 'none' or 'previous', not {blank_status or self.blank_status!r}")
         if self.tables['reserve_plan'] is not None:
             options.setdefault('reserve_requirements', reserve_requirements(self.tables['reserve_plan'], t))
         return inputs(self._by_run[t], None, cut('reserve_offers'), cut('load_resources'), curves,

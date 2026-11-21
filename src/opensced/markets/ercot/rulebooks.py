@@ -41,8 +41,12 @@ STATUSES = (
     # ... unless it is a quick-start unit that happens to telemeter OFF (the adapter's `quick_start` names them)
     Status('OFF-QS', False, {'OFFNS': ('NonSpin',)}),
     Status('ONSC', False, {'ONRES': _RRS_ECRS}),                        # synchronous condenser
-    # starting up: held at its base point, but awarded Non-Spin like an off-line unit, from its OFFNS row (measured)
-    Status('STARTUP', False, {'OFFNS': ('NonSpin',)}, proxy_reserves=False),
+    # starting up: held at its base point and "not eligible for an Ancillary Service award" (3.9.1(5)(b)) ...
+    Status('STARTUP'),
+    # ... except the units 6.4.9.1.1(4)-(5) name: a quick-start unit, and an off-line unit that was carrying Non-Spin and
+    # starts while ERCOT has Non-Spin deployed. They keep Non-Spin, on their on-line offer, up to HSL less base point.
+    # The adapter's `startup_non_spin` names them
+    Status('STARTUP-NS', False, {'ONRES': ('NonSpin',)}),
     Status('ONTEST'), Status('ONHOLD'), Status('SHUTDOWN'), Status('OUT'), Status('EMR'), Status('EMRSWGR'),
     Status('ONL', True, {'ONRES': None}),                               # a Load Resource that is on-line
     Status('OUTL'),
@@ -119,10 +123,13 @@ RTC_B = Rules(
                                'never awarded anything while not ONL (341,380 load-runs). The price is only a device to make the clearing '
                                'take self-provided MW first; it is never the marginal offer. An award equals the offer MW used for it, so a block '
                                'priced this low is always awarded',
-        'statuses_startup': 'measured on 22 days (13,103 unit-runs): a unit in STARTUP is never awarded ECRS. It is awarded Non-Spin on 42 '
-                            'of the 129 unit-runs where its off-line offer is under the clearing price with room and capability, nearly '
-                            'always exactly HSL less base point. Reading its on-line offer rows instead fits no better (38 of 119). The '
-                            'rule ERCOT applies is not identified; the off-line row is kept',
+        'statuses_startup': 'Protocols 3.9.1(5)(b): a unit in STARTUP is not eligible for an Ancillary Service award. 6.4.9.1.1(4)-(5) '
+                            'keep Non-Spin for an off-line unit that starts after a Non-Spin deployment and for a quick-start unit, up '
+                            'to HSL less base point. Measured on 13 days with deployment times (7,353 unit-runs in STARTUP, 37 awarded): '
+                            'awarding a quick-start unit always, and a unit that carried off-line Non-Spin before starting while ERCOT '
+                            'has Non-Spin deployed, on its on-line offer row, agrees with ERCOT to 0.5 MW on 36 of 39 unit-runs. Giving '
+                            'every starting unit its off-line offer agreed on 33 of 122. ECRS is never awarded (13,103 unit-runs). When '
+                            'ERCOT had Non-Spin deployed is in its operations messages, not in any data report',
         'statuses_offqs': 'measured on two days (3,093 unit-runs): an off-line quick-start unit is awarded ECRS and Non-Spin from its '
                           'ONRES row only. Its OFFNS row repeats the same MW and is not added',
         'shadow_price_caps': 'protocols Section 22 Attachment P: base case 5,251; contingency by voltage 4,500 / 3,500 / 2,800',

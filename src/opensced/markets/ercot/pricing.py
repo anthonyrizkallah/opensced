@@ -47,7 +47,7 @@ from opensced.core.model import clear
 from opensced.markets.ercot.rulebooks import ALL
 
 RUC_STATUSES = ('ONRUC',)
-NOT_WIDENED = ('ONRUC', 'ONTEST', 'STARTUP', 'SHUTDOWN', 'ONHOLD', 'OUTL')
+NOT_WIDENED = ('ONRUC', 'ONTEST', 'STARTUP', 'STARTUP-NS', 'SHUTDOWN', 'ONHOLD', 'OUTL')
 RAMP_MINUTES = 60.0
 RUC_OFFER_FLOOR = 250.0                                                  # a RUC-committed unit must offer at or above this
 DEPLOYED_LOAD_BID = (300.0, 700.0)                                       # $/MWh for the first and the last deployed MW

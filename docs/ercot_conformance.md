@@ -18,7 +18,9 @@ the code as it is. Counts in section 1: 2 rows MISSING in the clearing (14, 61),
 | Battery charge side: Reg-Down and efficiency | 8.1.1.3 (30 minutes); 3.7.1.3(1)(c) Round Trip Efficiency | MATCHES | efficiency x (0.5 h x Reg-Down + charging MW x 5 min) - discharging MW x 5 min <= room. 31,450 battery-runs on seven days: none breaks it, one in five sits exactly on it. Was 15 minutes with no efficiency, which let batteries carry up to twice the Reg-Down ERCOT allows. Efficiency is not published: read off the awards per battery, 0.85 otherwise |
 | Off-line quick-start offers | measured, 3,093 unit-runs | MATCHES | ECRS and Non-Spin from the ONRES row only. The OFFNS row repeats the same MW; it was being added |
 | Missing offer type (December 2025) | data | MATCHES | Read from the proxy block; no row wrong on 4.6 million rows of later days |
-| Zero-filled offers (before February 3, 2026) | data | APPROXIMATE, cannot be exact | Totals restored exactly from the aggregate curve; which resource held them is inferred from a later day. On a later day with its blanks hidden this costs about $1 of mean lambda error |
+| Zero-filled offers (before February 3, 2026) | data; Market Notice M-B040326-01 | MATCHES with ERCOT's corrected files | ERCOT posted corrected files on April 10, 2026 (one supplemental zip on the NP3-965-ER page; the API still serves the zero-filled ones). With them: January 25, 2026 from 3 runs off by $1 or more to none, January 28 from 18 to 5. With only the zero-filled file the totals are restored from the aggregate curve and the resources inferred, which costs about $1 of mean lambda error |
+| Non-Spin on a unit in startup | 3.9.1(5)(b); 6.4.9.1.1(4)-(5) | MATCHES | A starting unit carries no reserve, except a quick-start unit and a unit that carried off-line Non-Spin and starts while ERCOT has Non-Spin deployed; those keep Non-Spin on their on-line offer up to HSL less base point. 36 of 39 unit-runs agree with ERCOT on 13 days (the old rule: 33 of 122). When Non-Spin was deployed comes from ERCOT's operations messages (`as_deployments`). January 28, 2026 07:20: -$27.71 to -$1.00 |
+| A blank status (`NA`) | data | MATCHES on measurement | The unit takes the last status it had (`blank_status='previous'`). On the 6,166 runs of 33 days with such a unit it moves lambda by more than $0.05 in 15, each toward ERCOT's (January 28, 2026 07:00: $6.18 to $0.00) |
 | Three kinds of RRS | AS methodology; 3.16 | MATCHES | Three products on one demand curve, each with its own limit and offer price |
 | Minimum RRS from primary frequency response | AS methodology (1,365 MW in 2025, 1,377 MW in 2026); 3.16(2)(c) | MATCHES, with a caveat | Two dated rulebooks. Coded as a cap on the other two kinds, which equals the minimum whenever the full requirement clears. ERCOT may set a higher monthly value, which is not yet read from the monthly posting |
 | RRS from fast frequency response at most 450 MW | AS methodology | MATCHES | Rulebook limit |
@@ -42,8 +44,9 @@ Still open:
 | Shift factors | 6.5.7.1.13(3)(c) | Posted hourly to the secure area only. NPRR1239 and NPRR1249 move them to the public website on implementation |
 | A non-controllable load may not hold Non-Spin with RRS or ECRS | 4.4.7.2.1(6) | A yes/no choice per load, which a linear program cannot make. It could not bind on any of the 22 test days |
 | Qualified MW per resource and product | 6.5.7.3(12) | Registration data, not published. A controllable load's awards stop at a fixed MW per product for months and step up as the load grows (OB_ALD1 Non-Spin: 4.4, then 12.2, then 27.7 MW in 2026). `inputs(qualified_mw=...)` takes it; `helpers.qualified_mw()` reads a lower bound off ERCOT's awards. Off by default |
-| Status `NA` | data | 18,814 unit-runs in 22 days, held with no reserves; ERCOT awarded reserves on 83 of them |
-| Non-Spin on a unit in startup | 6.4.9.1.1(4)-(5) | ERCOT awards it on about a third of the unit-runs where the replica's rule would (42 of 129 in 22 days). Rule not identified. August 26, 2026 23:30 misses by $1.31 for this |
+| Off-line units on ERCOT's proxy Non-Spin offer | 6.5.7.3(5) | Which off-line units get the proxy offer is not published. Nine units on 22 days were awarded Non-Spin while OFF with no off-line offer of their own (104 of the 122 unit-runs with the proxy price under the clearing price); 78 other units never were (4,136 unit-runs). `helpers.offline_proxy_units()` reads them off the awards |
+| When ERCOT had Non-Spin deployed | 6.5.7.6.2.3 | Not in any data report: only in the Control Room's operations messages, which the website keeps for six months. Without the times a starting unit that carried off-line Non-Spin gets none (March 23, 2026 21:30: +$7.91). They cannot be inferred from the SCED files |
+| Batteries given no energy for one run | data | December 11, 2025 16:35: 29 batteries offering under the price get zero energy and more reserves, one minute after a Non-Spin deployment; lambda -$20.93. Nothing like it in 176,399 battery-runs on six days, where the replica's energy is within 0.5 MW of ERCOT's on 99.6%. Not a rule; cause not in any public file |
 | Value of lost load switch | 4.4.11 | Emergency Pricing Program and Peaker Net Margin. Replace the rulebook's numbers for the period |
 | Reliability deployment price adder: ERS restoration and DC Tie adjustment | 6.5.7.3.1 | `pricing_run()` covers RUC/RMR relaxation and deployed loads; these two terms are not published per run |
 | RUC-committed units priced under $250 | 6.5.7.3(4)(d), (5)(e) | Read from ERCOT's curves and offers, which is what SCED used. ERCOT's own files hold prices under $250 on some committed units; the text alone does not say which |
@@ -52,7 +55,7 @@ Still open:
 | Battery duration requirements | Section 8 (not pulled) | Values are measured from data, not cited |
 | The competitiveness test that decides which resources are capped | 3.19.4 | Not run. The set of capped resources is an input |
 | Cost-based mitigated offer caps | 4.4.9.4.1 | Verifiable costs are confidential. The generic cap from the gas index price is computed |
-| Reserve offers before February 3, 2026 | data | ERCOT's file writes a $0 offer and no offer the same way. Totals are restored from the aggregate curve; which resource held them is inferred |
+| ERCOT's API against its posted files | data | The API can hold an incomplete or uncorrected copy: no reserve offers for June 4, 2026 after 17:35 (the daily zip has them), zero-filled offers for December 5, 2025 to February 2, 2026 (the supplemental zip has the blanks). The posted files are the reference |
 
 
 First audit: November 16, 2026. Re-audited against the code on November 19, 2026.
@@ -138,7 +141,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 31 | HDL / LDL, CLR | S6 6.5.7.2(6)-(7) L975-988 | HDL = Min (POWERTELEM + (NORMRAMPDN * 5), HSLTELEM); LDL = Max (POWERTELEM - (NORMRAMPUP * 5), LSLTELEM). | Reads disclosed values; falls back to consumption when blank. | MATCHES (via data) |
 | 32 | Base Point inside HDL and LDL | S6 6.5.7.4(1) L1390 | "The Base Point set by SCED must observe a Resource's HDL and LDL." | Dispatch range is LDL..HDL (`dispatch_limits='ramp'`). ERCOT's HDL sits up to 0.05 MW above HSL on about 200 resources per run and the base point follows it. | MATCHES |
 | 33 | HASL / LASL | none | The terms do not appear in S2, S3, S4 or S6 (0 matches). They are no longer part of the rules read here. | Not used. | NOT APPLICABLE |
-| 34 | Which statuses SCED may move | S3 3.9.1(5)(b)(i)-(iv) L3378-3416 | Generation: ONRUC, ON, ONOS, ONTEST, ONEMR, ONOPTOUT, SHUTDOWN, STARTUP, OFFQS, ONSC, ONHOLD. ONSC and ONHOLD: "Base Points will be set equal to the telemetered net real power". OFFQS: "Off-Line but available for SCED deployment". | Rulebook `statuses`. Dispatchable: ON, ONRUC, ONOPTOUT, ONEMR, ONOS, OFFQS. Held at the Base Point: everything else (ONSC, ONHOLD, ONTEST, STARTUP, SHUTDOWN, OFF, OUT, EMR). Measured on 22 days: ONTEST and ONHOLD base points equal telemetered output on all 217,730 unit-runs but one. A status printed as `NA` (18,814 unit-runs, mostly units changing state) is not in the rulebook: held, no reserves, though ERCOT awarded reserves on 83 of them. | MATCHES, except status `NA` |
+| 34 | Which statuses SCED may move | S3 3.9.1(5)(b)(i)-(iv) L3378-3416 | Generation: ONRUC, ON, ONOS, ONTEST, ONEMR, ONOPTOUT, SHUTDOWN, STARTUP, OFFQS, ONSC, ONHOLD. ONSC and ONHOLD: "Base Points will be set equal to the telemetered net real power". OFFQS: "Off-Line but available for SCED deployment". | Rulebook `statuses`. Dispatchable: ON, ONRUC, ONOPTOUT, ONEMR, ONOS, OFFQS. Held at the Base Point: everything else (ONSC, ONHOLD, ONTEST, STARTUP, SHUTDOWN, OFF, OUT, EMR). Measured on 22 days: ONTEST and ONHOLD base points equal telemetered output on all 217,730 unit-runs but one. A status left blank (printed `NA`, usually for one run while a unit changes state) is read as the last status the unit had (`blank_status='previous'`): on 6,166 runs with such a unit, 15 move by more than $0.05, all toward ERCOT's lambda. | MATCHES |
 | 35 | Operator overrides of HDL / LDL | S6 6.5.7.1.10(3)(g) L818; 6.5.7.1.13(8)-(10) L898-900 | ERCOT may re-dispatch "by over-riding HDLs and LDLs". Operator action; no formula. | Uses disclosed HDL/LDL, taken to include overrides (inferred). | NOT CHECKABLE FROM TEXT |
 
 ### E. Reserve awards per resource
@@ -155,7 +158,7 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 | 43 | Energy plus awards against HSL | S6 6.5.7.3(14)(c) grey box NPRR1309 L1280 only | Grey box: HSL ≥ "the sum of the Resource-specific awards ... for energy, RRS, ECRS, Reg-Up, Reg-Down, Non-Spin, and DRRS" (Reg-Down is in the sum as written). The current text has no energy-inclusive row. | p + RegUp + RRS + ECRS + NonSpin ≤ the higher of HSL and HDL; p − RegDown ≥ the lower of LSL and LDL (reconstructed from data). | NOT CHECKABLE FROM TEXT |
 | 44 | Off-Line units | S3 3.18(2) L5346; S6 6.5.7.3(14)(d) grey box L1281 | "the amount of Non-Spin awarded must be less than or equal to the HSL for Off-Line Generation Resources". Grey box: ECRS + Non-Spin + DRRS ≤ HSL. | A held unit's up awards ≤ max(HSL − output, 0). | MATCHES |
 | 45 | Product eligibility by status | S3 3.9.1(5)(b) L3385-3396 | SHUTDOWN and STARTUP: "not eligible for an Ancillary Service award". OFFQS: ECRS and Non-Spin. ONSC: RRS and ECRS. OFF: Non-Spin. ONHOLD: none. | Per-status product lists in the rulebook. OFF: Non-Spin only, from what it submitted. OFFQS: ECRS and Non-Spin. ONSC: RRS and ECRS. ONHOLD, ONTEST, SHUTDOWN: none. Measured on 22 days: no award on any of 223,835 ONTEST, ONHOLD or SHUTDOWN unit-runs. | MATCHES |
-| 46 | Startup exception | S6 6.4.9.1.1(4)-(5) L563-564 | An Off-Line unit starting after a manual Non-Spin deployment stays eligible for Non-Spin; a QSGR in startup stays eligible for ECRS and Non-Spin. Eligible capacity = "telemetered HSL of the Resource minus its Base Point". | A unit in STARTUP is held at its Base Point and may carry Non-Spin from its off-line offer row. Measured on 22 days (13,103 unit-runs): ECRS is never awarded. Non-Spin is awarded on 42 of the 129 unit-runs where that offer is under the clearing price with room and capability, nearly always exactly HSL less Base Point. Reading the on-line offer rows instead fits no better (38 of 119). The rule ERCOT applies is not identified. | DIFFERS (rule not identified) |
+| 46 | Startup exception | S6 6.4.9.1.1(4)-(5) L563-564 | An Off-Line unit starting after a manual Non-Spin deployment stays eligible for Non-Spin; a QSGR in startup stays eligible for ECRS and Non-Spin. Eligible capacity = "telemetered HSL of the Resource minus its Base Point". | A unit in STARTUP is held at its Base Point and carries no reserve, except the units these paragraphs name (status `STARTUP-NS`, set by the adapter): a quick-start unit, and a unit that carried an off-line Non-Spin award before starting while ERCOT has Non-Spin deployed. They keep Non-Spin on their on-line offer row, limited by HSL less Base Point. Measured on 13 days with deployment times (7,353 unit-runs in STARTUP, 37 awarded): 36 of the 39 unit-runs the rule or ERCOT awards agree to 0.5 MW. ECRS is never awarded (13,103 unit-runs), so a quick-start unit keeps Non-Spin only. | MATCHES for Non-Spin; ECRS for a quick-start unit not awarded by ERCOT |
 | 47 | RRS-PFR limit per resource | S3 3.18(3)(a) L5350 | Set by verified droop under Nodal Operating Guide Section 8, Attachment N; default "20% of its Maximum Droop Response Range (MDRR)". | Uses disclosed `ASCapRRSPFR`. | NOT CHECKABLE FROM TEXT |
 | 48 | RRS-FFR limit per resource | S3 3.18(3)(d) L5353; S2 L480 | "less than or equal to its 15-minute rated capacity"; FFR must sustain "for at least 15 minutes". | Disclosed `ASCapRRSFFR`; battery duration for RRS = 0.25 h. | MATCHES |
 | 49 | Synchronous condenser limits | S3 3.18(3)(b) L5351, (4)(c) L5357 | RRS or ECRS "up to the Generation Resource's proven 20-second response capability". | Disclosed capability. | NOT CHECKABLE FROM TEXT |
@@ -233,18 +236,26 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 
 ## 2. Gaps most likely to change prices
 
-As of November 20, 2026. With ERCOT's own congestion (no shift factors), 25 of 6,424 runs on the 22 test days miss
-ERCOT's lambda by $1 or more.
+As of November 21, 2026. With ERCOT's own congestion (no shift factors), measured before the three defaults of
+November 21 (blank status, off-line proxy units, qualified MW from the day's awards), which are spot-checked only:
+
+| Days | Runs | Runs off by $1 or more |
+|---|---|---|
+| 22 test days (the engine was developed on these) | 6,424 | 8 |
+| 12 days it had never been run on (December 11, 2025 to September 15, 2026) | 3,485 | 2 |
 
 1. **Shift factors.** Not public; fitted. The largest error in a normal replay, and not part of the clearing math.
-2. **Reserve offers before February 3, 2026.** 21 of the 25 misses are on January 25 and 28, 2026.
-3. **Qualified MW of controllable loads.** Not published. With it read off ERCOT's awards, March 23, 2026 19:15 goes
-   from -$1.41 to -$0.36 and April 27, 2026 20:55 from -$2.38 to -$0.80.
-4. **Non-Spin on units in startup.** August 26, 2026 23:30 (-$1.31). Rule not identified.
-5. **How a battery short on stored energy splits RRS and ECRS.** August 26, 2026 22:30 (+$1.13); capping battery
-   awards at ERCOT's own leaves +$0.15. Rule not identified.
-6. **Demand target.** Matters only in runs where ERCOT itself was short or long.
-7. **Status `NA`, startup ECRS, the Non-Spin exclusion on loads, the value of lost load switch.** No miss traced to any.
+2. **When ERCOT had Non-Spin deployed.** From the operations messages; lost for March 14-31, April 21-30 and May
+   24-31, 2026. March 23, 2026 21:30 is off by +$7.91 for it.
+3. **Off-line units on ERCOT's proxy offer.** January 28, 2026 06:45 and 06:50 (+$3.78, +$3.71) before the units were
+   read off the awards.
+4. **Qualified MW of controllable loads.** Not published. Read off the day's awards: March 23, 2026 19:15 from -$1.41
+   to -$0.36, April 27, 2026 20:55 from -$2.38 to -$0.80.
+5. **One run with batteries held at zero energy.** December 11, 2025 16:35 (-$20.93). Not a rule; see the open table.
+6. **How a battery short on stored energy splits RRS and ECRS.** August 26, 2026 22:30 (+$1.13). Rule not identified.
+7. **An off-cycle run.** June 4, 2026 14:07:45 (-$1.15). Not examined.
+8. **Demand target.** Matters only in runs where ERCOT itself was short or long.
+9. **The Non-Spin exclusion on loads, the value of lost load switch.** No miss traced to either.
 
 ---
 

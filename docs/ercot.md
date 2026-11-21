@@ -122,13 +122,46 @@ curves gives a system lambda error of $0.16 and a node price error of $0.26, aga
 - **Controllable loads have no node.** Unless your `resource_nodes` names them, they do not affect any constraint.
   `ercot.inputs(..., controllable_loads=False)` treats them as fixed demand instead.
   A controllable load is awarded each reserve product only up to the MW it is qualified for. ERCOT does not publish
-  that number. `helpers.qualified_mw(load_resource_rows)` reads a lower bound off ERCOT's own awards (give it many
-  days); pass the result as `ercot.inputs(..., qualified_mw=...)`. Off by default.
+  that number. `helpers.qualified_mw(load_resource_rows)` reads a lower bound off ERCOT's own awards. `read_day` does
+  that on the day's own files and applies it; `ercot.inputs(..., qualified_mw=...)` takes your own table (many days
+  give a better bound than one). March 23, 2026 19:15 goes from -$1.41 to -$0.36 with it.
+- **Starting units and Non-Spin deployments.** A unit in STARTUP carries no reserve, with two exceptions the
+  protocols name (6.4.9.1.1(4)-(5)): a quick-start unit, and a unit that was carrying off-line Non-Spin and starts while
+  ERCOT has Non-Spin deployed. Those keep Non-Spin on their on-line offer, up to HSL less base point. When Non-Spin was
+  deployed is not in any data report. ERCOT's Control Room posts it as operations messages
+  (ercot.com/services/comm/mkt_notices/opsmessages: "CM-ASM-NOTF AS_TYPE: Non-Spin ... DEPLOYED" and "All Non-Spin has
+  been recalled"), and the site keeps only six months. Give the day a file `as_deployments` with columns `product`,
+  `start`, `end` (one row per span, `product` = `NonSpin`). Without it only quick-start units keep Non-Spin while
+  starting, and `read_day` warns if the day has a unit that would have needed it. The times cannot be inferred from
+  the SCED files: units that were carrying off-line Non-Spin start together all day long (300 runs on 31 days with
+  two or more doing so, 23 of them inside a deployment).
+- **Use ERCOT's posted files when the API disagrees.** The API's copy of a report can be incomplete or uncorrected:
+  it serves no reserve offers for June 4, 2026 after 17:35 (ERCOT's daily zip has all 24 hours), and it still serves
+  the zero-filled offers of December 2025 and January 2026. The adapter reads the posted CSV as it is, in both
+  spellings of its columns (`PRICE1_NS` in files posted to April 2026, `PRICE1_NSPIN` later). Check that every SCED
+  run of a day has reserve offer rows before trusting it.
+- **A blank status.** ERCOT's file leaves a unit's status blank (printed `NA`) in about a third of all runs, usually
+  for one run while the unit changes state. `read_day` gives such a unit the last status it had
+  (`day.blank_status = 'previous'`); `'none'` holds it at its base point with no reserves instead. Measured on the 6,166
+  runs of 33 days that have such a unit: `'previous'` moves the system price by more than $0.05 in 15 of them, each
+  time toward ERCOT's, e.g. four quick-start hydro units that keep their ECRS in the run they come on (January 28,
+  2026 07:00, $6.18 -> $0.00).
+- **Off-line units on ERCOT's proxy offer.** An off-line unit is awarded only the Non-Spin its QSE offered on an
+  off-line offer, unless it is quick-start. A few other units are also awarded through ERCOT's proxy offer for
+  unoffered capacity (nine units on 22 days; 78 others in the same position never were). Which units is not published.
+  `helpers.offline_proxy_units()` reads them off ERCOT's awards and `read_day` applies it to the day's own files;
+  pass `offline_proxy=[...]` to name them yourself, or `[]` for none.
 - **The constraint list is ERCOT's.** The engine is told which constraints were active. It does not find them from a
   full network model.
-- **Before February 3, 2026** ERCOT wrote unpriced reserve offer cells as 0, so a real $0 offer and a blank look the
-  same. About one zero cell in eleven is a real offer. The adapter reads a 0 as "not offered" and then puts the real
-  ones back from two more files, if you give them:
+- **Before February 3, 2026** ERCOT's daily reserve offer files wrote unpriced cells as 0, so a real $0 offer and a
+  blank look the same (Market Notice M-B040326-01). **Use ERCOT's corrected files.** They were posted once, on April 10,
+  2026, as `60d_SCED_Resource_AS_OFFERS_02032026_thru_04032026_SUPPLEMENTAL` on the NP3-965-ER report page (1 GB, one
+  CSV per operating day from December 5, 2025 to February 2, 2026); the API and the daily zips still serve the
+  zero-filled ones. Save the day's corrected CSV as `60d_sced_resource_as_offers` and the adapter sees its blank prices
+  and reads every 0 as a real offer. On January 25, 2026 that takes the worst system price error from $1.52 to $0.12.
+
+  With only the zero-filled file, about one zero cell in eleven is a real offer. The adapter then reads a 0 as "not
+  offered" and puts the real ones back from two more files, if you give them:
   - `2day_agg_sced_as_offers` (NP3-906-EX) is the exact sum of every resource's offers, so its MW at $0 is the total to
     restore for each product.
   - `reference_sced_resource_as_offers` is the reserve offer disclosure of any day on or after February 3, 2026. It
