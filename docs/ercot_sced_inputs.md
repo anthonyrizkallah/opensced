@@ -2,8 +2,7 @@
 
 ## Status after the first round of changes
 
-The inventory below is as first written. Since then the package was changed so that these are user inputs. Results
-on August 12, 2026 are unchanged by the refactor (system lambda error $0.108, node price error $0.152).
+The inventory below is as first written. Since then the package was changed so that these are user inputs.
 
 **Now settable**
 

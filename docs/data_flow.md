@@ -53,7 +53,7 @@ replaces any input table with its own numbers and clears the same way.
 | `reserve_requirements` | DAM Ancillary Service Plan (NP4-33-CD) | `dam_as_plan` |
 | `constraints` | SCED Shadow Prices and Binding Transmission Constraints (NP6-86-CD) | `shdw_prices_bnd_trns_const` |
 | `demand` | Sum of the run's base points in the disclosure | (derived) |
-| `shift_factors` | Not public. See below | yours |
+| `shift_factors` | On ERCOT's secure site only. See below | yours |
 | `resource_nodes` | Not public as one table | yours |
 | Scoring only: node prices | LMPs by Resource Node, Load Zone and Hub (NP6-788-CD) | `lmp_node_zone_hub` |
 | Scoring only: system lambda | SCED System Lambda (NP6-322-CD) | `sced_system_lambda` |
@@ -73,13 +73,5 @@ needs an ERCOT digital certificate: SCED Settlement Point Shift Factors (NP6-607
 (SYS-608-CD), kept for 31 days. Approved rule changes (NPRR1239, NPRR1249) move them to the public website once ERCOT
 implements them.
 
-Until then there are two ways to get the table this engine takes:
-
-1. **ERCOT's own**, if you have market participant access. Pivot the report to constraint x settlement point and
-   label the rows as [ercot.md](ercot.md) describes.
-2. **Fit them from public prices.** In every SCED run, system lambda less a node's price equals the sum over binding
-   constraints of shadow price x shift factor. Each run is one equation per node, and a set of runs solves for the
-   shift factors by least squares. Pair each run's prices with the same run's shadow prices at the exact SCED
-   timestamp: a five-minute slot can hold more than one run.
-
-This package does not ship a fit or any shift factors.
+The engine takes them as a table, constraint x settlement point, with rows labelled as [ercot.md](ercot.md)
+describes. This package does not ship or estimate shift factors.

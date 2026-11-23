@@ -4,22 +4,11 @@ An open market-clearing engine for power markets. Give it offers, limits, reserv
 one dispatch interval, and it returns the system price, the price at every node, dispatch, reserve awards and reserve
 prices.
 
-The first market is **ERCOT's real-time market** (SCED with energy and ancillary services co-optimized, live since
-December 5, 2025). Replayed on 34 operating days from December 11, 2025 to September 15, 2026, every SCED run of each
-day, from ERCOT's public files:
+The first market is **ERCOT's real-time market**: SCED with energy and ancillary services co-optimized, live since
+December 5, 2025. The engine implements ERCOT's clearing rules as a dated rulebook and reads ERCOT's public report
+formats. [docs/clearing_math.md](docs/clearing_math.md) writes out the program it solves.
 
-| Test | Runs | System lambda within $1 of ERCOT | Node prices within $1 |
-|---|---|---|---|
-| The clearing alone: congestion taken from ERCOT's own node prices | 9,909 | 99.95% (5 runs miss) | not applicable |
-| Full replay: shift factors fitted from the same day's public prices | 9,937 | 98.4% | 98.0% (99.8% within $5) |
-
-The first row tests the engine's rules and math. The second adds the error of shift factors that ERCOT does not
-publish and that the user must supply. The 34 days include days with system lambda up to $1,373 and 12 days the
-engine had never been run on while it was built. The five misses and the weakest days are
-listed in [Known differences](#known-differences).
-
-**This repository is the engine only. It ships no market data.** You download ERCOT's public reports yourself;
-[docs/data_flow.md](docs/data_flow.md) shows which report fills which input.
+**This repository is the engine only. It ships no market data.** You bring the inputs.
 
 ## Install
 
@@ -58,6 +47,41 @@ Everything is a pandas object. Change an input and clear again:
 ```python
 opensced.clear(case.copy(demand=300)).system_lambda
 ```
+
+## The clearing
+
+One interval is one linear program, solved with HiGHS through scipy:
+
+```text
+minimize    energy offer cost + reserve offer cost - value of reserves bought on the demand curves
+          + shortage price x shortfall - surplus price x surplus + max shadow price x constraint violations
+
+subject to  power balance       sum of dispatch + shortfall - surplus = demand
+            dispatch range      each resource between its limits and what its ramp rate can reach
+            network             flow + sum(shift factor x change in output) <= limit + violation
+            reserves            energy and awards share each resource's headroom; offers; demand curves; limits
+            storage             energy and reserve awards fit in each battery's state of charge
+```
+
+Prices are the program's duals:
+
+| Price | Is |
+|---|---|
+| System lambda | Dual of the power balance |
+| Shadow price of a constraint | Dual of its row |
+| Node price | `lambda - sum(shift factor x shadow price)` |
+| Reserve clearing price | Dual of the product's demand row |
+
+- **Energy.** An offer curve is a sloped line between its points. It is cut into steps and the program is solved
+  again with finer steps around each resource's dispatch, so dispatch lands where the line meets the price.
+- **Network.** Only the change in dispatch is multiplied by shift factors; the flow at current outputs is an input.
+  A constraint nothing can relieve prices at its maximum shadow price.
+- **Reserves.** Cleared in the same program as energy. Several products can serve one demand curve.
+- **Storage.** Each product has a duration; a battery's awards must fit in the energy it holds.
+- **Mitigation.** Optionally two steps: reference prices from the competitive constraints, then floors and caps.
+
+The full formulation is in [docs/clearing_math.md](docs/clearing_math.md). The code for each part is one short file
+in `src/opensced/core/features/`.
 
 ## A real ERCOT run
 
@@ -124,11 +148,10 @@ publishes everything the clearing needs except two things:
 | `shift_factors` | A table, constraint x settlement point: MW of flow on the constraint per MW injected there |
 | `resource_nodes` | Which settlement point each resource injects at |
 
-This package does not ship either. Without them a run still clears, as one node with no network, which gets the
-system price wrong by several dollars on a congested day. ERCOT posts its shift factors only to its secure Market
-Information System; [docs/data_flow.md](docs/data_flow.md#shift-factors) explains how to use those, or how to fit
-shift factors from public prices. To forecast instead of replay, you replace any other table with your own: demand,
-offers, wind and solar limits, outages.
+This package does not ship either, and does not estimate them. Without them a run still clears, as one node with no
+network. ERCOT posts its shift factors to its secure Market Information System
+([docs/data_flow.md](docs/data_flow.md#shift-factors)). To forecast instead of replay, you replace any other table
+with your own: demand, offers, wind and solar limits, outages.
 
 ## The inputs
 
@@ -178,18 +201,6 @@ side. More in [docs/rules.md](docs/rules.md) and [docs/ercot.md](docs/ercot.md).
 `opensced.list_markets()` shows what is built. Today that is ERCOT. PJM, MISO, SPP, CAISO and NYISO are planned in
 the same package, on the same input tables.
 
-## How it works
-
-One interval is one linear program, solved with HiGHS through scipy:
-
-- **Energy.** Each resource's offer curve is cut into steps and dispatched in merit order between its limits.
-- **Network.** Each constraint limits `flow + sum(shift factor x change in output)`. Its dual is the shadow price.
-- **Reserves.** Awards share each resource's headroom with energy. Demand curves say what each MW is worth.
-- **Storage.** A battery's energy and reserve awards must fit in its state of charge.
-
-Prices are the program's duals. A node's price is `lambda - sum(shift factor x shadow price)`. The code for each part
-is one short file in `src/opensced/core/features/`.
-
 ## What it does not do
 
 - It does not estimate shift factors or map resources to nodes.
@@ -197,41 +208,30 @@ is one short file in `src/opensced/core/features/`.
 - It does not decide which units are online. Commitment is an input, through each resource's limits.
 - A chained run assumes every resource does exactly what it was told. Real fleets drift from their instructions.
 - For ERCOT, demand is the sum of ERCOT's base points rather than ERCOT's own demand target, which is not published.
-  [docs/ercot_conformance.md](docs/ercot_conformance.md) lists every clearing rule in ERCOT's Protocols against what
-  the model does, with what is still open.
+  [docs/ercot_conformance.md](docs/ercot_conformance.md) lists what is still open.
 - Dates before December 5, 2025 cleared under different rules (energy only, with a scarcity adder) and are not
   modelled yet.
 
-## Known differences
+## Checked against ERCOT
 
-Measured on the 34 days above. With congestion taken from ERCOT's own node prices, five of 9,909 runs miss the system
-lambda by $1 or more:
+The clearing was checked against ERCOT's published system lambda on every SCED run of 34 operating days from December
+11, 2025 to September 15, 2026, with congestion taken from ERCOT's own published node prices so that only the
+clearing rules and math are tested. Of 9,909 runs, 9,904 are within $1 of ERCOT. The five that are not:
 
-| Run | Miss | Cause |
+| Run | Difference | Cause |
 |---|---|---|
-| December 11, 2025 16:35 | -$20.93 | ERCOT held batteries at zero energy in this one run. Not a rule the engine can read from the files |
-| March 23, 2026 21:30 | +$7.91 | Depends on when ERCOT had Non-Spin deployed. ERCOT's operations messages for that day are no longer posted |
+| December 11, 2025 16:35 | -$20.93 | ERCOT held batteries at zero energy in this one run. Not a rule that can be read from the files |
+| March 23, 2026 21:30 | +$7.91 | Depends on when ERCOT had Non-Spin deployed, which is not in any data report |
 | June 4, 2026 14:07 | -$1.15 | A run between the five-minute runs. Not yet examined |
 | August 26, 2026 22:30 | +$1.13 | How a battery short on stored energy splits RRS and ECRS. Rule not identified |
 | January 28, 2026 07:20 | -$1.00 | Not yet explained |
 
-In a full replay the remaining error is the shift factors. On the most congested days, with many constraints at
-shadow prices of several thousand dollars, a shift factor error of 0.0003 is a $1 miss at a node:
+[docs/ercot_conformance.md](docs/ercot_conformance.md) lists every clearing rule in ERCOT's Protocols against what the
+engine does. Node prices also depend on the shift factors you supply, which are not part of the engine.
 
-| Day | System lambda within $1 | Node prices within $1 |
-|---|---|---|
-| January 25, 2026 | 90.4% | 93.2% |
-| April 24, 2026 | 92.0% | 88.6% |
-| April 27, 2026 | 93.8% | 92.5% |
-| August 26, 2026 | 94.2% | 89.2% |
-| The other 30 days | 95.5% to 100%, 16 of them at 100% | 94.6% to 100% |
-
-These figures use shift factors fitted on the same day's prices, which a forecast does not have. Shift factors fitted
-on prior days only have not been re-measured on the 34 days.
-
-Three inputs the engine needs are not in ERCOT's data reports, and are read off ERCOT's own results for the day unless
-you supply them: when Non-Spin was deployed, the qualified MW of controllable loads, and which off-line units ERCOT
-awards through its proxy offer. [docs/ercot.md](docs/ercot.md) covers each.
+Three inputs the clearing needs are not in ERCOT's data reports, and are read off ERCOT's own results for the day
+unless you supply them: when Non-Spin was deployed, the qualified MW of controllable loads, and which off-line units
+ERCOT awards through its proxy offer. [docs/ercot.md](docs/ercot.md) covers each.
 
 ## Licence
 

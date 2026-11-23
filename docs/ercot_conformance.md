@@ -247,12 +247,7 @@ units, qualified MW from the day's awards):
 The five: December 11, 2025 16:35 (-$20.93), March 23, 2026 21:30 (+$7.91), June 4, 2026 14:07 (-$1.15), August 26,
 2026 22:30 (+$1.13), January 28, 2026 07:20 (-$1.00). Before the three defaults there were 10.
 
-Full replay on the same 34 days (9,937 runs) with shift factors fitted on the same day's prices, each SCED run paired
-with itself at its exact timestamp: system lambda within $1 on 98.4% of runs, node prices within $1 on 98.0% and within
-$5 on 99.8%. Pairing by five-minute slot instead gave 95.3% and 96.9%: a slot can hold more than one run (312 runs on
-January 25, 2026).
-
-1. **Shift factors.** Not public; fitted. The largest error in a normal replay, and not part of the clearing math.
+1. **Shift factors.** An input the user supplies, not part of the clearing. Node prices are only as good as they are.
 2. **When ERCOT had Non-Spin deployed.** From the operations messages; lost for March 14-31, April 21-30 and May
    24-31, 2026. March 23, 2026 21:30 is off by +$7.91 for it.
 3. **Off-line units on ERCOT's proxy offer.** January 28, 2026 06:45 and 06:50 (+$3.78, +$3.71) before the units were

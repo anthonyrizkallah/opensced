@@ -47,8 +47,7 @@ the ids this adapter gives constraints:
 ```
 
 `ercot.adapter.constraint_name(table)` builds them from the published report. ERCOT posts its own shift factors
-only to its secure Market Information System; [data_flow.md](data_flow.md#shift-factors) covers that and the fit from
-public prices. A constraint with no row in your table
+only to its secure Market Information System; see [data_flow.md](data_flow.md#shift-factors). A constraint with no row in your table
 is left out of the clearing; `inputs.notes['constraints_without_shift_factors']` lists which.
 
 **`resource_nodes`**: resource name to settlement point, as a dict, a Series, or a DataFrame with columns `resource`
@@ -115,8 +114,7 @@ Checked on all 288 runs of August 12, 2026 against ERCOT's own step-2 curves, wi
 of capped units read from ERCOT's result: floors match within a cent on 99.2% of the 16,101 curve segments ERCOT
 raised, and 99.99% of the 701,306 segments ERCOT left alone are left alone. Caps match within a cent on 21% of the
 2,990 capped segments and within $1 on 44%: those at the generic cap match exactly, those at the reference price are
-within about $0.20, and those set by confidential costs cannot be reproduced. Clearing on the engine's own mitigated
-curves gives a system lambda error of $0.16 and a node price error of $0.26, against $0.11 and $0.15 on ERCOT's.
+within about $0.20, and those set by confidential costs cannot be reproduced.
 
 ## What is simplified
 
