@@ -33,8 +33,7 @@ rules.notes                             # where each number comes from
 | `products` | The reserve products: direction, hours a battery must sustain them, minutes of ramp counted, the demand curve they count towards, and any MW of that curve reserved for them |
 | `features` | Which parts of the clearing are on: `network`, `reserves`, `storage` |
 
-`print(rules)` lists every entry, and `help(opensced.Rules)` explains each. [ercot_sced_inputs.md](ercot_sced_inputs.md)
-lists every input ERCOT's rules name and where it is set.
+`print(rules)` lists every entry, and `help(opensced.Rules)` explains each.
 
 ## Three uses
 

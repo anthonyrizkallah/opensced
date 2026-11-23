@@ -11,11 +11,25 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 keywords = ["ERCOT", "SCED", "LMP", "RTC+B", "power markets", "economic dispatch", "ancillary services"]
 dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.11"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Repository = "https://github.com/anthonyrizkallah/opensced"
+Documentation = "https://github.com/anthonyrizkallah/opensced/tree/main/docs"
+Issues = "https://github.com/anthonyrizkallah/opensced/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
 parquet = ["pyarrow>=14"]
 exact = ["highspy>=1.7"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples/*.py", "docs", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/opensced"]
