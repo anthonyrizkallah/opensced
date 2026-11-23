@@ -1,4 +1,7 @@
-"""The ERCOT adapter on the example run shipped with the repository (public files, August 12, 2026 17:00)."""
+"""The ERCOT adapter. The repository ships no market data, so the tests that read ERCOT's files need a folder of
+your own: one SCED run or more of an operating day on or after January 1, 2026, laid out as docs/ercot.md describes.
+Point OPENSCED_ERCOT_FOLDER at it (default: examples/ercot/2026-08-12_1700, which is not in the repository). Without
+it those tests are skipped; the others build their own small tables."""
 import os
 
 import numpy as np
@@ -7,13 +10,15 @@ import pytest
 
 import opensced
 
-FOLDER = os.path.join(os.path.dirname(__file__), '..', 'examples', 'ercot', '2026-08-12_1700')
+FOLDER = os.environ.get('OPENSCED_ERCOT_FOLDER') or os.path.join(os.path.dirname(__file__), '..', 'examples', 'ercot', '2026-08-12_1700')
 EXTRA = os.path.join(FOLDER, 'not_published_by_ercot')
 ercot = opensced.market('ercot')
 
 
 @pytest.fixture(scope='module')
 def day():
+    if not os.path.isdir(FOLDER):
+        pytest.skip('no ERCOT files: set OPENSCED_ERCOT_FOLDER to a folder of your own')
     return ercot.read_day(FOLDER)
 
 

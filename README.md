@@ -5,15 +5,21 @@ one dispatch interval, and it returns the system price, the price at every node,
 prices.
 
 The first market is **ERCOT's real-time market** (SCED with energy and ancillary services co-optimized, live since
-December 5, 2025). Replaying all 288 SCED runs of August 12, 2026 from ERCOT's public files:
+December 5, 2025). Replayed on 34 operating days from December 11, 2025 to September 15, 2026, every SCED run of each
+day, from ERCOT's public files:
 
-| | Shift factors fitted on the day itself | Shift factors from the prior 60 days |
-|---|---|---|
-| System lambda, mean error | $0.11 | $0.20 |
-| Price at 1,118 settlement points, mean error | $0.15 | $0.36 |
-| Settlement point prices within $1 of ERCOT | 98.7% | 93.4% |
+| Test | Runs | System lambda within $1 of ERCOT | Node prices within $1 |
+|---|---|---|---|
+| The clearing alone: congestion taken from ERCOT's own node prices | 9,909 | 99.95% (5 runs miss) | not applicable |
+| Full replay: shift factors fitted from the same day's public prices | 9,937 | 98.4% | 98.0% (99.8% within $5) |
 
-That is one mild day, with the binding constraints taken as given. See [What it does not do](#what-it-does-not-do).
+The first row tests the engine's rules and math. The second adds the error of shift factors that ERCOT does not
+publish and that the user must supply. The 34 days include days with system lambda up to $1,373 and 12 days the
+engine had never been run on while it was built. The five misses and the weakest days are
+listed in [Known differences](#known-differences).
+
+**This repository is the engine only. It ships no market data.** You download ERCOT's public reports yourself;
+[docs/data_flow.md](docs/data_flow.md) shows which report fills which input.
 
 ## Install
 
@@ -57,7 +63,7 @@ opensced.clear(case.copy(demand=300)).system_lambda
 
 ```python
 ercot = opensced.market('ercot')
-day = ercot.read_day('examples/ercot/2026-08-12_1700')    # a folder of ERCOT's public files
+day = ercot.read_day('my_data/2026-08-12')                # your folder of ERCOT's public files for one day
 inputs = day.inputs(day.times[0], shift_factors=my_shift_factors, resource_nodes=my_resource_nodes)
 
 result = ercot.clear(inputs)                              # uses the rulebook in force that day
@@ -87,14 +93,31 @@ each resource's starting output, how far its ramp rate lets it move, and each ba
 Run the examples:
 
 ```bash
-python examples/01_three_bus.py        # the made-up grid, step by step
-python examples/02_ercot_one_run.py    # one real SCED run against ERCOT's published prices
-python examples/03_what_if.py          # more demand, less solar, a changed rule
+python examples/01_three_bus.py                          # the made-up grid, step by step: no data needed
+python examples/02_ercot_one_run.py my_data/2026-08-12   # one real SCED run against ERCOT's published prices
+python examples/03_what_if.py my_data/2026-08-12         # more demand, less solar, a changed rule
 ```
+
+## How data feeds the engine
+
+```mermaid
+flowchart LR
+  A["ERCOT public reports<br/>(you download)"] --> R["ercot.read_day<br/>adapter"]
+  B["shift_factors, resource_nodes<br/>(you supply)"] --> R
+  R --> I["Input tables<br/>one set per SCED run"]
+  RB["Rulebook<br/>in force on the date"] --> C
+  I --> C["opensced.clear<br/>one linear program"]
+  C --> O["Prices, dispatch,<br/>reserve awards"]
+  O --> S["opensced.score<br/>against ERCOT's prices"]
+```
+
+The full chart, with every ERCOT report and the table it fills, is in [docs/data_flow.md](docs/data_flow.md). The
+input tables are defined column by column in [docs/schema.md](docs/schema.md).
 
 ## What you bring
 
-ERCOT publishes everything the clearing needs except two things:
+A folder with one operating day of ERCOT's public reports ([docs/ercot.md](docs/ercot.md) names the files). ERCOT
+publishes everything the clearing needs except two things:
 
 | Input | What it is |
 |---|---|
@@ -102,8 +125,10 @@ ERCOT publishes everything the clearing needs except two things:
 | `resource_nodes` | Which settlement point each resource injects at |
 
 This package does not ship either. Without them a run still clears, as one node with no network, which gets the
-system price wrong by several dollars on a congested day. To forecast instead of replay, you replace any other table
-with your own: demand, offers, wind and solar limits, outages.
+system price wrong by several dollars on a congested day. ERCOT posts its shift factors only to its secure Market
+Information System; [docs/data_flow.md](docs/data_flow.md#shift-factors) explains how to use those, or how to fit
+shift factors from public prices. To forecast instead of replay, you replace any other table with your own: demand,
+offers, wind and solar limits, outages.
 
 ## The inputs
 
@@ -176,7 +201,37 @@ is one short file in `src/opensced/core/features/`.
   the model does, with what is still open.
 - Dates before December 5, 2025 cleared under different rules (energy only, with a scarcity adder) and are not
   modelled yet.
-- The accuracy above comes from one day. More days, including scarcity days, have not been published yet.
+
+## Known differences
+
+Measured on the 34 days above. With congestion taken from ERCOT's own node prices, five of 9,909 runs miss the system
+lambda by $1 or more:
+
+| Run | Miss | Cause |
+|---|---|---|
+| December 11, 2025 16:35 | -$20.93 | ERCOT held batteries at zero energy in this one run. Not a rule the engine can read from the files |
+| March 23, 2026 21:30 | +$7.91 | Depends on when ERCOT had Non-Spin deployed. ERCOT's operations messages for that day are no longer posted |
+| June 4, 2026 14:07 | -$1.15 | A run between the five-minute runs. Not yet examined |
+| August 26, 2026 22:30 | +$1.13 | How a battery short on stored energy splits RRS and ECRS. Rule not identified |
+| January 28, 2026 07:20 | -$1.00 | Not yet explained |
+
+In a full replay the remaining error is the shift factors. On the most congested days, with many constraints at
+shadow prices of several thousand dollars, a shift factor error of 0.0003 is a $1 miss at a node:
+
+| Day | System lambda within $1 | Node prices within $1 |
+|---|---|---|
+| January 25, 2026 | 90.4% | 93.2% |
+| April 24, 2026 | 92.0% | 88.6% |
+| April 27, 2026 | 93.8% | 92.5% |
+| August 26, 2026 | 94.2% | 89.2% |
+| The other 30 days | 95.5% to 100%, 16 of them at 100% | 94.6% to 100% |
+
+These figures use shift factors fitted on the same day's prices, which a forecast does not have. Shift factors fitted
+on prior days only have not been re-measured on the 34 days.
+
+Three inputs the engine needs are not in ERCOT's data reports, and are read off ERCOT's own results for the day unless
+you supply them: when Non-Spin was deployed, the qualified MW of controllable loads, and which off-line units ERCOT
+awards through its proxy offer. [docs/ercot.md](docs/ercot.md) covers each.
 
 ## Licence
 

@@ -1,21 +1,25 @@
-"""One real ERCOT SCED run: August 12, 2026 at 17:00, rebuilt from ERCOT's public files and scored against the
-prices ERCOT published.
+"""One real ERCOT SCED run, rebuilt from ERCOT's public files and scored against the prices ERCOT published.
 
-    python examples/02_ercot_one_run.py
+    python examples/02_ercot_one_run.py <folder> [<folder with your shift factors>]
 
-The folder examples/ercot/2026-08-12_1700 holds the public files for that run. ERCOT does not publish shift factors
-or which settlement point each resource sits at; if the folder `not_published_by_ercot` is present they are read
-from there, otherwise the run is cleared without the network and only the system price is compared.
+<folder> holds one operating day of ERCOT's public reports, which you download yourself: docs/data_flow.md lists the
+reports and the file names. This repository ships no market data.
+
+ERCOT does not publish shift factors or which settlement point each resource sits at. If the second folder (default:
+<folder>/not_published_by_ercot) holds shift_factors.csv.gz (constraint x settlement point) and resource_nodes.csv
+(resource, node), they are used. Otherwise the run is cleared without the network and only the system price is compared.
 """
 import os
+import sys
 
 import pandas as pd
 
 import opensced
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-FOLDER = os.path.join(HERE, 'ercot', '2026-08-12_1700')
-EXTRA = os.path.join(FOLDER, 'not_published_by_ercot')
+if len(sys.argv) < 2:
+    sys.exit(__doc__)
+FOLDER = sys.argv[1]
+EXTRA = sys.argv[2] if len(sys.argv) > 2 else os.path.join(FOLDER, 'not_published_by_ercot')
 
 ercot = opensced.market('ercot')
 day = ercot.read_day(FOLDER)
@@ -30,7 +34,7 @@ run = day.times[0]
 inputs = day.inputs(run, shift_factors=shift_factors, resource_nodes=resource_nodes)
 print(inputs, '\n')
 
-result = ercot.clear(inputs)            # picks the rulebook in force on August 12, 2026
+result = ercot.clear(inputs)            # picks the rulebook in force on the run's date
 print(result, '\n')
 
 published = day.published_lambda()[run]

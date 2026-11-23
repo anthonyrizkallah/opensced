@@ -236,19 +236,27 @@ documents, or the text does not write the rule down), NOT APPLICABLE.
 
 ## 2. Gaps most likely to change prices
 
-As of November 21, 2026. With ERCOT's own congestion (no shift factors), measured before the three defaults of
-November 21 (blank status, off-line proxy units, qualified MW from the day's awards), which are spot-checked only:
+As of November 22, 2026. With ERCOT's own congestion (no shift factors), all defaults on (blank status, off-line proxy
+units, qualified MW from the day's awards):
 
 | Days | Runs | Runs off by $1 or more |
 |---|---|---|
-| 22 test days (the engine was developed on these) | 6,424 | 8 |
+| 22 test days (the engine was developed on these) | 6,424 | 3 |
 | 12 days it had never been run on (December 11, 2025 to September 15, 2026) | 3,485 | 2 |
+
+The five: December 11, 2025 16:35 (-$20.93), March 23, 2026 21:30 (+$7.91), June 4, 2026 14:07 (-$1.15), August 26,
+2026 22:30 (+$1.13), January 28, 2026 07:20 (-$1.00). Before the three defaults there were 10.
+
+Full replay on the same 34 days (9,937 runs) with shift factors fitted on the same day's prices, each SCED run paired
+with itself at its exact timestamp: system lambda within $1 on 98.4% of runs, node prices within $1 on 98.0% and within
+$5 on 99.8%. Pairing by five-minute slot instead gave 95.3% and 96.9%: a slot can hold more than one run (312 runs on
+January 25, 2026).
 
 1. **Shift factors.** Not public; fitted. The largest error in a normal replay, and not part of the clearing math.
 2. **When ERCOT had Non-Spin deployed.** From the operations messages; lost for March 14-31, April 21-30 and May
    24-31, 2026. March 23, 2026 21:30 is off by +$7.91 for it.
 3. **Off-line units on ERCOT's proxy offer.** January 28, 2026 06:45 and 06:50 (+$3.78, +$3.71) before the units were
-   read off the awards.
+   read off the awards; within $1 since.
 4. **Qualified MW of controllable loads.** Not published. Read off the day's awards: March 23, 2026 19:15 from -$1.41
    to -$0.36, April 27, 2026 20:55 from -$2.38 to -$0.80.
 5. **One run with batteries held at zero energy.** December 11, 2025 16:35 (-$20.93). Not a rule; see the open table.

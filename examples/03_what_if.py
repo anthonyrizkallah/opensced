@@ -1,16 +1,20 @@
-"""What-if questions on the real ERCOT run: change an input, or change a rule, and compare prices.
+"""What-if questions on a real ERCOT run: change an input, or change a rule, and compare prices.
 
-    python examples/03_what_if.py
+    python examples/03_what_if.py <folder> [<folder with your shift factors>]
+
+The folders are the same as in 02_ercot_one_run.py. This repository ships no market data.
 """
 import os
+import sys
 
 import pandas as pd
 
 import opensced
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-FOLDER = os.path.join(HERE, 'ercot', '2026-08-12_1700')
-EXTRA = os.path.join(FOLDER, 'not_published_by_ercot')
+if len(sys.argv) < 2:
+    sys.exit(__doc__)
+FOLDER = sys.argv[1]
+EXTRA = sys.argv[2] if len(sys.argv) > 2 else os.path.join(FOLDER, 'not_published_by_ercot')
 
 ercot = opensced.market('ercot')
 day = ercot.read_day(FOLDER)

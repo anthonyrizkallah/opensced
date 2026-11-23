@@ -6,7 +6,11 @@ build/
 .pytest_cache/
 .env
 .env.*
+# No market data is published in this repository. Bring your own files.
 *.parquet
-!examples/*.parquet
-examples/**/not_published_by_ercot/
+*.csv
+*.csv.gz
+*.zip
+examples/ercot/
+my_data/
 .DS_Store

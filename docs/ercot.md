@@ -46,7 +46,9 @@ the ids this adapter gives constraints:
 <constraintName>|<fromStation>|<toStation>|<contingencyName>
 ```
 
-`ercot.adapter.constraint_name(table)` builds them from the published report. A constraint with no row in your table
+`ercot.adapter.constraint_name(table)` builds them from the published report. ERCOT posts its own shift factors
+only to its secure Market Information System; [data_flow.md](data_flow.md#shift-factors) covers that and the fit from
+public prices. A constraint with no row in your table
 is left out of the clearing; `inputs.notes['constraints_without_shift_factors']` lists which.
 
 **`resource_nodes`**: resource name to settlement point, as a dict, a Series, or a DataFrame with columns `resource`
