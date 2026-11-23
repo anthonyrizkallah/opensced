@@ -10,9 +10,9 @@ day.times                  # the SCED runs
 
 ## The files
 
-`read_day(folder)` looks for one file per report, named after the report's endpoint on ERCOT's public API. Each may
-be `.parquet`, `.csv` or `.csv.gz`, holds one operating day, and keeps ERCOT's own column names. Both of ERCOT's
-naming styles work: the website's files ("Base Point") and the API's ("basePoint").
+`read_day(folder)` looks for one file per report, named after the report's endpoint on ERCOT's public API (which is
+why some start `60_` and others `60d_`). Each may be `.parquet`, `.csv` or `.csv.gz`, holds one operating day, and
+keeps ERCOT's own column names. `.parquet` needs pyarrow: `pip install "opensced[parquet]"`.
 
 | File name | Report | ERCOT id | Used for |
 |---|---|---|---|
@@ -27,8 +27,59 @@ naming styles work: the website's files ("Base Point") and the API's ("basePoint
 | `sced_system_lambda` | SCED System Lambda | NP6-322-CD | Scoring |
 | `rt_clear_price_cap_sced` | Real-Time Clearing Prices for Capacity by SCED Interval | NP6-332-CD | Scoring |
 
-The 60-day disclosure is published about 60 days after the operating day, so a replay is possible for dates at least
-that old. The demand curves are published per hour; every other report is per SCED run, about every five minutes.
+The demand curves are published per hour; every other report is per SCED run, about every five minutes. `print(day)`
+lists each file as found (with its row count) or missing.
+
+What a folder can do depends on what is in it:
+
+| In the folder | You get |
+|---|---|
+| The two Required files | A cleared run, energy only. ERCOT clears energy and reserves together, so the price is approximate |
+| Plus reserve offers, Load Resources, demand curves and the AS plan | Energy and reserves cleared together, as ERCOT does |
+| Plus the constraints file and your shift factors | The network, and a price at every node |
+| Plus the three Scoring files | The comparison with what ERCOT published |
+
+## Getting the files
+
+ERCOT posts the same reports in two places, and a replay needs both.
+
+**The 60-day disclosure: ERCOT's website, no account.** The four disclosure files come in one zip per operating day
+from the report's page, [NP3-965-ER](https://www.ercot.com/mp/data-products/data-product-details?id=NP3-965-ER)
+(the list of files is at `https://www.ercot.com/misapp/GetReports.do?reportTypeId=13052`). Years of days are kept.
+
+- The zip is named by the day it was posted, which is the operating day plus 60 days: operating day September 10,
+  2026 is `...20261109...60_Day_SCED_Disclosure.zip`, and the files inside end in `-09-NOV-26.csv`. Check the
+  `SCED Time Stamp` column once you open one.
+- One zip is about 55 MB and 750 MB unzipped. It holds ten CSVs. Four are used:
+
+| In the zip | Save it as |
+|---|---|
+| `60d_SCED_Gen_Resource_Data-<date>.csv` | `60_sced_gen_res_data.csv` |
+| `60d_ESR_Data_in_SCED-<date>.csv` | `60d_sced_esr_data.csv` |
+| `60d_SCED_Resource_AS_OFFERS-<date>.csv` | `60d_sced_resource_as_offers.csv` |
+| `60d_Load_Resource_Data_in_SCED-<date>.csv` | `60_load_res_data_in_sced.csv` |
+
+  The other six (self-arranged AS, SMNE, manual overrides, offer updates) are not read. Each CSV already holds exactly
+  one operating day; rename it and leave its columns alone. Gzip it if you want the space back.
+
+**Everything else: ERCOT's public API, free account.** The website keeps the other reports for a short time only:
+5 days for node prices and system lambda, 7 days for shadow prices and reserve prices, 31 days for the demand curves
+and the AS plan. By the time a day's disclosure is out, they are gone from the website. Two ways to have them:
+
+- ERCOT's public API serves history. Register at [apiexplorer.ercot.com](https://apiexplorer.ercot.com) for a
+  subscription key (free). Each report is one endpoint,
+  `https://api.ercot.com/api/public-reports/<report id>/<file name>`, for example
+  `.../np6-322-cd/sced_system_lambda`, filtered by date. Save each day's rows under the file name in the table above.
+  The API also serves the four disclosure files, under the same names.
+- Or save the website's files every few days, and wait 60 days for the disclosure. The website posts these reports
+  as one small file per SCED run, which you would join into one file per day.
+
+The four disclosure files are read in both of ERCOT's column styles: the website's ("Base Point",
+"AS Capability REGUP", "State of Charge") and the API's ("basePoint", "ASCapREGUP", "SOC"). The other reports are read
+in the API's column names. Where the two differ, the website's disclosure files carry more decimals: the API rounds
+some MW values (reserve offer blocks, Load Resource capability) to one decimal place.
+
+For a first run, the warning about `as_deployments` can be ignored; "What is simplified" below explains it.
 
 If you already hold the tables as DataFrames, skip the folder:
 

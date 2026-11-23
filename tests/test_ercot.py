@@ -484,3 +484,51 @@ def test_off_line_units_on_ercots_proxy_offer_are_read_off_the_awards():
     offers = pd.DataFrame([row('PROXY', False), row('OFFERED', True), row('IDLE', False), row('RUNNING', False)])
     assert helpers.offline_proxy_units(sced, offers) == ['PROXY']        # awarded while OFF with no Non-Spin offer of its own
     assert helpers.offline_proxy_units(sced, offers, min_runs=2) == []
+
+
+def test_the_websites_disclosure_csvs_read_like_the_apis(day, tmp_path):
+    """ERCOT's website names the columns "AS Capability REGUP", "State of Charge", "SCED Bid to Buy Curve-MW1", ...;
+    its API names them ASCapREGUP, SOC, SCEDBidCurveMW1. Both give the same input tables."""
+    from opensced.markets.ercot import adapter
+    back = {v: k for k, v in adapter.CANON.items() if k.startswith(('AS Capability', 'State of', 'Minimum SOC', 'Maximum SOC'))}
+    load_back = {v: k for k, v in adapter.LOAD_CANON.items() if k != 'SCED Timestamp'}
+    for key, stem in adapter.FILES.items():
+        t = day.tables[key]
+        if t is None:
+            continue
+        raw = adapter._read(FOLDER, stem)
+        if key in ('gen', 'esr'):
+            raw = raw.rename(columns=back)
+        if key == 'load_resources':
+            raw = raw.rename(columns=load_back)
+            assert 'Resource Name' in raw and 'resourceName' not in raw
+        raw.to_csv(tmp_path / f'{stem}.csv', index=False)
+    web = ercot.read_day(str(tmp_path))
+    run = day.times[0]
+    a, b = web.inputs(run), day.inputs(run)
+    assert len(a.storage) == len(b.storage) > 0
+    for name in ('resources', 'storage', 'reserve_limits', 'reserve_offers', 'energy_offers'):
+        x, y = getattr(a, name), getattr(b, name)
+        assert len(x) == len(y), name
+        num = [c for c in x.columns if pd.api.types.is_numeric_dtype(x[c]) and not pd.api.types.is_bool_dtype(x[c])]
+        assert np.allclose(x[num].to_numpy(float), y[num].to_numpy(float), equal_nan=True), name
+
+
+def test_a_day_without_state_of_charge_or_capability_columns_warns(day, tmp_path):
+    from opensced.markets.ercot import adapter
+    for key in ('gen', 'esr'):
+        raw = adapter._read(FOLDER, adapter.FILES[key])
+        raw.drop(columns=[c for c in raw.columns if c in ('SOC', 'minSOC', 'maxSOC') or c.startswith('ASCap')]).to_csv(
+            tmp_path / f'{adapter.FILES[key]}.csv', index=False)
+    with pytest.warns(UserWarning) as seen:
+        ercot.read_day(str(tmp_path))
+    text = ' '.join(str(w.message) for w in seen)
+    assert 'state of charge' in text and 'reserve capability' in text
+
+
+def test_a_missing_scoring_file_names_the_report(day, tmp_path):
+    from opensced.markets.ercot import adapter
+    adapter._read(FOLDER, adapter.FILES['gen']).to_csv(tmp_path / f'{adapter.FILES["gen"]}.csv', index=False)
+    partial = ercot.read_day(str(tmp_path))
+    with pytest.raises(FileNotFoundError, match='NP6-322-CD'):
+        partial.published_lambda()

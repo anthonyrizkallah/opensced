@@ -13,10 +13,14 @@ formats. [docs/clearing_math.md](docs/clearing_math.md) writes out the program i
 ## Install
 
 ```bash
-pip install opensced
+git clone https://github.com/anthonyrizkallah/opensced
 ```
 
-Python 3.10 or later. It depends on numpy, pandas and scipy only.
+```bash
+pip install ./opensced
+```
+
+Python 3.10 or later. It depends on numpy, pandas and scipy only. It is not on PyPI yet.
 
 ## Five minutes, no data
 
@@ -88,12 +92,18 @@ in `src/opensced/core/features/`.
 ```python
 ercot = opensced.market('ercot')
 day = ercot.read_day('my_data/2026-08-12')                # your folder of ERCOT's public files for one day
-inputs = day.inputs(day.times[0], shift_factors=my_shift_factors, resource_nodes=my_resource_nodes)
+print(day)                                                # which files were found, how many SCED runs
+run = day.times[0]
 
+result = ercot.clear(day.inputs(run))                     # no network: one price for the whole system
+result.system_lambda, day.published_lambda()[run]         # the engine's price, and ERCOT's
+
+inputs = day.inputs(run, shift_factors=my_shift_factors, resource_nodes=my_resource_nodes)    # with your network
 result = ercot.clear(inputs)                              # uses the rulebook in force that day
-opensced.score(result, system_lambda=day.published_lambda()[day.times[0]],
-               node_prices=day.published_node_prices().loc[day.times[0]])
+opensced.score(result, system_lambda=day.published_lambda()[run], node_prices=day.published_node_prices().loc[run])
 ```
+
+[docs/ercot.md](docs/ercot.md#getting-the-files) says where to download each file and what to name it.
 
 A whole day:
 
@@ -140,7 +150,8 @@ input tables are defined column by column in [docs/schema.md](docs/schema.md).
 
 ## What you bring
 
-A folder with one operating day of ERCOT's public reports ([docs/ercot.md](docs/ercot.md) names the files). ERCOT
+A folder with one operating day of ERCOT's public reports ([docs/ercot.md](docs/ercot.md#getting-the-files) says where
+to get each file). ERCOT
 publishes everything the clearing needs except two things:
 
 | Input | What it is |
@@ -232,6 +243,10 @@ engine does. Node prices also depend on the shift factors you supply, which are 
 Three inputs the clearing needs are not in ERCOT's data reports, and are read off ERCOT's own results for the day
 unless you supply them: when Non-Spin was deployed, the qualified MW of controllable loads, and which off-line units
 ERCOT awards through its proxy offer. [docs/ercot.md](docs/ercot.md) covers each.
+
+## Questions and bugs
+
+Open an issue on GitHub: https://github.com/anthonyrizkallah/opensced/issues
 
 ## Licence
 

@@ -63,8 +63,9 @@ Optional files, each for one known data problem, are described in [ercot.md](erc
 `2day_agg_sced_as_offers`, `reference_sced_resource_as_offers`.
 
 Each file holds one operating day, as `.parquet`, `.csv` or `.csv.gz`, with ERCOT's column names left as they are.
-The 60-day disclosure is posted about 60 days after the operating day, so a replay is possible for days at least that
-old.
+The 60-day disclosure is posted 60 days after the operating day, so a replay is possible for days at least that old.
+The disclosure comes from ERCOT's website with no account; by then the other reports are only on ERCOT's public API,
+which needs a free account. [ercot.md](ercot.md#getting-the-files) has the steps.
 
 ## Shift factors
 

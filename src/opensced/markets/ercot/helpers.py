@@ -221,8 +221,8 @@ def qualified_mw(load_resources, rules=None, min_runs=3, tolerance=0.06):
     Give it many days, not one. `load_resources` is 60-Day SCED Load Resource rows, one day or many."""
     from opensced.markets.ercot import rulebooks
     rules = rules or rulebooks.ALL.latest
-    L = load_resources.copy()
-    L.columns = L.columns.str.strip()
+    from opensced.markets.ercot import adapter
+    L = adapter.load_columns(load_resources)
     bid = pd.to_numeric(L['SCEDBidCurveMW1'], errors='coerce').notna() if 'SCEDBidCurveMW1' in L else pd.Series(False, index=L.index)
     L = L[bid.to_numpy()]                                               # controllable: it has a bid curve
     name = L['resourceName'].astype(str).str.strip()

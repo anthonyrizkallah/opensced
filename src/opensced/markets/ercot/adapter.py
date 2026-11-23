@@ -1,6 +1,6 @@
 """ERCOT: public reports -> opensced input tables.
 
-Everything here reads files anyone can download from ERCOT (data.ercot.com or the public API). Nothing else is
+Everything here reads files anyone can download from ERCOT (ercot.com or the public API; docs/ercot.md says how). Nothing else is
 needed, except the two inputs ERCOT does not publish, which you bring yourself:
 
     shift_factors    constraint x settlement point
@@ -24,7 +24,8 @@ The reports, by the file name read_day() looks for (the name of the report's API
                                   (the nine product files in one table, with a `product` column)
 
 Each may be a .parquet or .csv file (optionally .csv.gz) holding one operating day, with ERCOT's own column names.
-Both of ERCOT's naming styles are understood ("Base Point" from the website's files, "basePoint" from the API).
+The four files of the 60-day disclosure are understood in both of ERCOT's naming styles ("Base Point" in the website's
+files, "basePoint" from the API). The other reports are read in the API's column names.
 
 How a SCED run becomes the tables
     status      a resource SCED can move (telemetered status in DISPATCHABLE, which includes units on an Output Schedule
@@ -79,7 +80,27 @@ CANON = {
     'Normal Ramp Rate Down': 'rampRateDown',
     **{f'SCED{n} Curve-{k}{i}': f'SCED{n}Curve{k}{i}' for n in (1, 2) for k in ('MW', 'Price') for i in range(1, NPT + 1)},
     **{f'AS Awards {a}': f'ASAwards{a}' for a in ('ECRS', 'NSPIN', 'REGDN', 'REGUP', 'RRSFFR', 'RRSPFR', 'RRSUFR')},
+    **{f'AS Capability {a}': f'ASCap{a}' for a in ('ECRS', 'NSPIN', 'REGDN', 'REGUP', 'RRSFFR', 'RRSPFR', 'RRSUFR')},
+    'State of Charge': 'SOC', 'Minimum SOC': 'minSOC', 'Maximum SOC': 'maxSOC',
 }
+# the Load Resource file: the website's column names -> the API's
+LOAD_CANON = {
+    'SCED Time Stamp': 'SCEDTimestamp', 'SCED Timestamp': 'SCEDTimestamp', 'Repeated Hour Flag': 'repeatHourFlag', 'QSE': 'qseName',
+    'DME': 'dmeName', 'Resource Name': 'resourceName', 'Telemetered Resource Status': 'telResStatus',
+    'Max Power Consumption': 'maxPowerConsumption', 'Low Power Consumption': 'lowPowerConsumption',
+    'Real Power Consumption': 'realPowerConsumption', 'Ramp Rate Up': 'rampRateUp', 'Ramp Rate Down': 'rampRateDown',
+    'Base Point': 'basePoint',
+    **{f'SCED Bid to Buy Curve-{k}{i}': f'SCEDBidCurve{k}{i}' for k in ('MW', 'Price') for i in range(1, 11)},
+    **{f'{a} {p}': f'{b}{p}' for a, b in (('AS Awards', 'ASAwards'), ('AS Capability', 'ASCap'), ('Self Provided', 'self'))
+       for p in ('ECRS', 'NSPIN', 'REGDN', 'REGUP', 'RRSFFR', 'RRSPFR', 'RRSUFR')},
+}
+# report -> what to call it in a message
+REPORTS = {'gen': '60-Day SCED Disclosure, generation resources (NP3-965-ER)', 'esr': '60-Day SCED Disclosure, storage resources (NP3-965-ER)',
+           'reserve_offers': '60-Day SCED Disclosure, reserve offers (NP3-965-ER)', 'load_resources': '60-Day SCED Disclosure, Load Resources (NP3-965-ER)',
+           'reserve_demand': 'Ancillary Service Demand Curves (NP4-212-CD)', 'reserve_plan': 'DAM Ancillary Service Plan (NP4-33-CD)',
+           'constraints': 'SCED Shadow Prices and Binding Transmission Constraints (NP6-86-CD)',
+           'lmp': 'LMPs by Resource Node, Load Zone and Hub (NP6-788-CD)', 'system_lambda': 'SCED System Lambda (NP6-322-CD)',
+           'reserve_prices': 'Real-Time Clearing Prices for Capacity by SCED Interval (NP6-332-CD)'}
 FILES = {'gen': '60_sced_gen_res_data', 'esr': '60d_sced_esr_data', 'reserve_offers': '60d_sced_resource_as_offers',
          'load_resources': '60_load_res_data_in_sced', 'reserve_demand': 'dam_sced_as_demand_curves', 'reserve_plan': 'dam_as_plan',
          'constraints': 'shdw_prices_bnd_trns_const', 'lmp': 'lmp_node_zone_hub', 'system_lambda': 'sced_system_lambda',
@@ -111,6 +132,19 @@ def normalize(df):
     df[TS] = pd.to_datetime(df[TS], errors='coerce')
     df[RES] = df[RES].astype(str).str.strip()
     return df.drop_duplicates(subset=[c for c in (RES, TS, REP) if c in df.columns])
+
+
+def load_columns(L):
+    """The Load Resource file with the API's column names. The website's CSV names them "Resource Name",
+    "AS Awards NSPIN", "SCED Bid to Buy Curve-MW1", ..."""
+    if L is None:
+        return L
+    L = L.rename(columns=lambda c: str(c).strip())
+    L = L.rename(columns={k: v for k, v in LOAD_CANON.items() if k in L.columns and v not in L.columns})
+    if 'resourceName' not in L or 'SCEDTimestamp' not in L:
+        raise ValueError(f'this does not look like the 60-Day SCED Load Resource file: no resource name or SCED timestamp column. '
+                         f'Columns start: {list(L.columns[:6])}')
+    return L
 
 
 def _num(x, c):
@@ -623,6 +657,7 @@ def inputs(sced, when=None, reserve_offers=None, load_resources=None, reserve_de
     res['mitigated'] = res['name'].isin(set(mitigated)) if mitigated is not None else False
     own = None
     if load_resources is not None:
+        load_resources = load_columns(load_resources)
         L = _run_rows(load_resources, when, 'SCEDTimestamp')
         lres, leo, llim, own, moves = _load_tables(L, rules, controllable_loads, load_room)
         if reserve_offers is None:                                     # no offers: loads that only carry reserves add nothing
@@ -701,6 +736,7 @@ class Day:
         self.folder = folder
         t = {k: _read(folder, stem) for k, stem in FILES.items()}
         t['reserve_offers'], t['reference_offers'] = offer_columns(t['reserve_offers']), offer_columns(t['reference_offers'])
+        t['load_resources'] = load_columns(t['load_resources'])
         if t['gen'] is None:
             have = ', '.join(sorted(os.listdir(folder))) if os.path.isdir(folder) else 'the folder does not exist'
             raise FileNotFoundError(f'{folder}: no {FILES["gen"]}.parquet or .csv (the 60-Day SCED Disclosure for generation '
@@ -714,6 +750,13 @@ class Day:
             warnings.warn(f'{folder}: no {FILES["reserve_plan"]} file (DAM Ancillary Service Plan, NP4-33-CD). Limits written against a '
                           f'reserve requirement then use the demand curve\'s total MW; for Non-Spin that is far above the requirement, '
                           f'so the limit on Non-Spin from non-controllable loads cannot bind', stacklevel=2)
+        kinds = self.sced['Resource Type'].astype(str).str.strip() if 'Resource Type' in self.sced else pd.Series('', index=self.sced.index)
+        if kinds.isin(STORAGE_TYPES).any() and 'SOC' not in self.sced:
+            warnings.warn(f'{folder}: the day has storage resources but no state of charge column (SOC, or "State of Charge" in the '
+                          f'website\'s file), so batteries are cleared without an energy limit', stacklevel=2)
+        if not any(c in self.sced for c in GEN_CAPABILITY):
+            warnings.warn(f'{folder}: no reserve capability columns (ASCapREGUP, or "AS Capability REGUP" in the website\'s file, ...), '
+                          f'so no generator or battery can carry reserves', stacklevel=2)
         self._by_run = dict(tuple(self.sced.groupby(TS)))
         self._curves = None                                              # demand curves, cut by hour once (the full report is large)
         rd = t['reserve_demand']
@@ -844,7 +887,8 @@ class Day:
 
     def _need(self, key):
         if self.tables[key] is None:
-            raise FileNotFoundError(f'{self.folder}: no {FILES[key]}.parquet or .csv')
+            raise FileNotFoundError(f'{self.folder}: no {FILES[key]}.parquet, .csv or .csv.gz. That is ERCOT\'s {REPORTS.get(key, key)}; '
+                                    f'docs/ercot.md says where to download it')
         return self.tables[key]
 
     def _snap(self, ts):
@@ -858,8 +902,6 @@ class Day:
         day = pd.Timestamp(self.times[0]).date() if self.times else '?'
         out = [f'ERCOT day {day}: {len(self.times):,} SCED runs, {self.sced[RES].nunique():,} resources']
         for k, stem in FILES.items():
-            if k in ('gen', 'esr'):
-                continue
             out.append(f'  {stem:<28} ' + ('missing' if self.tables[k] is None else f'{len(self.tables[k]):,} rows'))
         return '\n'.join(out)
 

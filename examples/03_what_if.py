@@ -22,7 +22,7 @@ kw = {}
 if os.path.isdir(EXTRA):
     kw = dict(shift_factors=pd.read_csv(os.path.join(EXTRA, 'shift_factors.csv.gz'), index_col=0),
               resource_nodes=pd.read_csv(os.path.join(EXTRA, 'resource_nodes.csv')))
-inputs = day.inputs(day.times[0], **kw)
+inputs = day.inputs(day.times[len(day.times) * 17 // 24], **kw)       # a run at about 17:00
 base = ercot.clear(inputs)
 print(f'Base case: system lambda ${base.system_lambda:,.2f}\n')
 
@@ -42,5 +42,8 @@ rules = ercot.rules.on(inputs.time)
 draft = rules.replace(name='draft/ecrs-2h', products={'ECRS': {'duration_hours': 2.0}})
 print('\nRule change:', rules.diff(draft))
 changed = ercot.clear(inputs, rules=draft)
-print(pd.DataFrame({'today': base.reserve_prices, 'draft': changed.reserve_prices}).round(3))
+if base.reserve_prices is None:
+    print('No dam_sced_as_demand_curves file in the folder, so reserves were not cleared and this rule changes nothing.')
+else:
+    print(pd.DataFrame({'today': base.reserve_prices, 'draft': changed.reserve_prices}).round(3))
 print(f'System lambda ${changed.system_lambda:,.2f}  ({changed.system_lambda - base.system_lambda:+,.4f})')
