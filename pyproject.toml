@@ -19,9 +19,9 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/anthonyrizkallah/opensced"
-Documentation = "https://github.com/anthonyrizkallah/opensced/tree/main/docs"
-Issues = "https://github.com/anthonyrizkallah/opensced/issues"
+Repository = "https://github.com/opensced/opensced"
+Documentation = "https://github.com/opensced/opensced/tree/main/docs"
+Issues = "https://github.com/opensced/opensced/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

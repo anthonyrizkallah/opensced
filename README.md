@@ -6,7 +6,7 @@ prices.
 
 The first market is **ERCOT's real-time market**: SCED with energy and ancillary services co-optimized, live since
 December 5, 2025. The engine implements ERCOT's clearing rules as a dated rulebook and reads ERCOT's public report
-formats. [docs/clearing_math.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/clearing_math.md) writes out the program it solves.
+formats. [docs/clearing_math.md](https://github.com/opensced/opensced/blob/main/docs/clearing_math.md) writes out the program it solves.
 
 **This repository is the engine only. It ships no market data.** You bring the inputs.
 
@@ -17,7 +17,7 @@ pip install opensced
 ```
 
 Python 3.10 or later. It depends on numpy, pandas and scipy only. The examples and tests are in the
-[repository](https://github.com/anthonyrizkallah/opensced).
+[repository](https://github.com/opensced/opensced).
 
 ## Five minutes, no data
 
@@ -81,7 +81,7 @@ Prices are the program's duals:
 - **Storage.** Each product has a duration; a battery's awards must fit in the energy it holds.
 - **Mitigation.** Optionally two steps: reference prices from the competitive constraints, then floors and caps.
 
-The full formulation is in [docs/clearing_math.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/clearing_math.md). The code for each part is one short file
+The full formulation is in [docs/clearing_math.md](https://github.com/opensced/opensced/blob/main/docs/clearing_math.md). The code for each part is one short file
 in `src/opensced/core/features/`.
 
 ## A real ERCOT run
@@ -100,7 +100,7 @@ result = ercot.clear(inputs)                              # uses the rulebook in
 opensced.score(result, system_lambda=day.published_lambda()[run], node_prices=day.published_node_prices().loc[run])
 ```
 
-[docs/ercot.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot.md#getting-the-files) says where to download each file and what to name it.
+[docs/ercot.md](https://github.com/opensced/opensced/blob/main/docs/ercot.md#getting-the-files) says where to download each file and what to name it.
 
 A whole day:
 
@@ -142,12 +142,12 @@ flowchart LR
   O --> S["opensced.score<br/>against ERCOT's prices"]
 ```
 
-The full chart, with every ERCOT report and the table it fills, is in [docs/data_flow.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/data_flow.md). The
-input tables are defined column by column in [docs/schema.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/schema.md).
+The full chart, with every ERCOT report and the table it fills, is in [docs/data_flow.md](https://github.com/opensced/opensced/blob/main/docs/data_flow.md). The
+input tables are defined column by column in [docs/schema.md](https://github.com/opensced/opensced/blob/main/docs/schema.md).
 
 ## What you bring
 
-A folder with one operating day of ERCOT's public reports ([docs/ercot.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot.md#getting-the-files) says where
+A folder with one operating day of ERCOT's public reports ([docs/ercot.md](https://github.com/opensced/opensced/blob/main/docs/ercot.md#getting-the-files) says where
 to get each file). ERCOT
 publishes everything the clearing needs except two things:
 
@@ -158,7 +158,7 @@ publishes everything the clearing needs except two things:
 
 This package does not ship either, and does not estimate them. Without them a run still clears, as one node with no
 network. ERCOT posts its shift factors to its secure Market Information System
-([docs/data_flow.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/data_flow.md#shift-factors)). To forecast instead of replay, you replace any other table
+([docs/data_flow.md](https://github.com/opensced/opensced/blob/main/docs/data_flow.md#shift-factors)). To forecast instead of replay, you replace any other table
 with your own: demand, offers, wind and solar limits, outages.
 
 ## The inputs
@@ -181,7 +181,7 @@ print(opensced.schema('resources'))   # one table
 inputs.validate()                     # raises with the table and the row at fault
 ```
 
-The full data dictionary is in [docs/schema.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/schema.md). ERCOT's own calculations (dispatch limits from
+The full data dictionary is in [docs/schema.md](https://github.com/opensced/opensced/blob/main/docs/schema.md). ERCOT's own calculations (dispatch limits from
 ramp rates, proxy offers, constraint caps) are in `opensced.market('ercot').helpers`, for when you forecast the
 underlying numbers instead of reading ERCOT's result.
 
@@ -204,7 +204,7 @@ ercot.clear(inputs, rules=draft)
 ```
 
 Clearing a date picks its rulebook automatically, so a backtest across a rule change uses the right rules on each
-side. More in [docs/rules.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/rules.md) and [docs/ercot.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot.md).
+side. More in [docs/rules.md](https://github.com/opensced/opensced/blob/main/docs/rules.md) and [docs/ercot.md](https://github.com/opensced/opensced/blob/main/docs/ercot.md).
 
 `opensced.list_markets()` shows what is built. Today that is ERCOT. PJM, MISO, SPP, CAISO and NYISO are planned in
 the same package, on the same input tables.
@@ -216,7 +216,7 @@ the same package, on the same input tables.
 - It does not decide which units are online. Commitment is an input, through each resource's limits.
 - A chained run assumes every resource does exactly what it was told. Real fleets drift from their instructions.
 - For ERCOT, demand is the sum of ERCOT's base points rather than ERCOT's own demand target, which is not published.
-  [docs/ercot_conformance.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot_conformance.md) lists what is still open.
+  [docs/ercot_conformance.md](https://github.com/opensced/opensced/blob/main/docs/ercot_conformance.md) lists what is still open.
 - Dates before December 5, 2025 cleared under different rules (energy only, with a scarcity adder) and are not
   modelled yet.
 
@@ -234,17 +234,17 @@ clearing rules and math are tested. Of 9,909 runs, 9,904 are within $1 of ERCOT.
 | August 26, 2026 22:30 | +$1.13 | How a battery short on stored energy splits RRS and ECRS. Rule not identified |
 | January 28, 2026 07:20 | -$1.00 | Not yet explained |
 
-[docs/ercot_conformance.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot_conformance.md) lists every clearing rule in ERCOT's Protocols against what the
+[docs/ercot_conformance.md](https://github.com/opensced/opensced/blob/main/docs/ercot_conformance.md) lists every clearing rule in ERCOT's Protocols against what the
 engine does. Node prices also depend on the shift factors you supply, which are not part of the engine.
 
 Three inputs the clearing needs are not in ERCOT's data reports, and are read off ERCOT's own results for the day
 unless you supply them: when Non-Spin was deployed, the qualified MW of controllable loads, and which off-line units
-ERCOT awards through its proxy offer. [docs/ercot.md](https://github.com/anthonyrizkallah/opensced/blob/main/docs/ercot.md) covers each.
+ERCOT awards through its proxy offer. [docs/ercot.md](https://github.com/opensced/opensced/blob/main/docs/ercot.md) covers each.
 
 ## Questions and bugs
 
-Open an issue on GitHub: https://github.com/anthonyrizkallah/opensced/issues
+Open an issue on GitHub: https://github.com/opensced/opensced/issues
 
 ## Licence
 
-Apache-2.0. See [LICENSE](https://github.com/anthonyrizkallah/opensced/blob/main/LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/opensced/opensced/blob/main/LICENSE).
