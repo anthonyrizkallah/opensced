@@ -10,6 +10,8 @@ formats. [docs/clearing_math.md](https://github.com/opensced/opensced/blob/main/
 
 **This repository is the engine only. It ships no market data.** You bring the inputs.
 
+A hosted version is coming. Join the waitlist at [opensced.io](https://opensced.io).
+
 ## Install
 
 ```bash
